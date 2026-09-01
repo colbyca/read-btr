@@ -1,0 +1,3 @@
+app_identifier("com.colbycarter.readbtr")
+# apple_id("your-apple-id@example.com") # fill in when you set up App Store Connect / TestFlight
+# team_id("YOUR_TEAM_ID")

@@ -1,0 +1,23 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Run unit and UI tests on the simulator"
+  lane :test do
+    run_tests(
+      project: "ReadBTR.xcodeproj",
+      scheme: "ReadBTR",
+      devices: ["iPhone 16"]
+    )
+  end
+
+  desc "Build the app for the simulator (debug, no signing)"
+  lane :build do
+    gym(
+      project: "ReadBTR.xcodeproj",
+      scheme: "ReadBTR",
+      skip_package_ipa: true,
+      skip_archive: true,
+      destination: "generic/platform=iOS Simulator"
+    )
+  end
+end
