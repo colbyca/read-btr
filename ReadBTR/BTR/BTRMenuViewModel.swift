@@ -109,7 +109,7 @@ final class BTRMenuViewModel {
             // No BTR entry on the embedded preview's own selection menu —
             // selecting text there and tapping BTR would open a second BTR
             // menu on top of this one.
-            includesBTRAction: false)
+            includesCustomActions: false)
     }
 
     // MARK: - Step 1 — entity extraction (§6.6.3)

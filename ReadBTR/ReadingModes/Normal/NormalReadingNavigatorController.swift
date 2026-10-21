@@ -30,22 +30,26 @@ final class NormalReadingNavigatorController: UIViewController {
     /// already the system's own.
     var onBTRRequested: ((Selection) -> Void)?
 
+    /// Fired when the reader taps "Save Quote" in the same native edit
+    /// menu — Normal mode's equivalent of Guided Reading's tooltip action.
+    var onSaveQuoteRequested: ((Selection) -> Void)?
+
     /// Height of the tap-to-reveal-toolbar zone, in points, measured from
     /// the top of the navigator's own view.
     private static let topTapZoneHeight: CGFloat = 80
 
-    /// The "BTR" entry appended to the native selection edit menu. `false`
-    /// only for the read-only preview pane `BTRMenuViewModel.preparePreview()`
+    /// `includesCustomActions` controls the "Save Quote" and "BTR" entries
+    /// appended to the native selection edit menu. `false` only for the read-only preview pane `BTRMenuViewModel.preparePreview()`
     /// embeds inside the BTR menu itself — without this, selecting text
     /// there could open a second BTR menu on top of the first.
     init(
         publication: Publication, initialLocation: Locator?, theme: ReaderTheme, layout: NormalModeLayout,
-        includesBTRAction: Bool = true
+        includesCustomActions: Bool = true
     ) throws {
         navigator = try EPUBNavigatorViewController(
             publication: publication,
             initialLocation: initialLocation,
-            config: Self.configuration(theme: theme, layout: layout, includesBTRAction: includesBTRAction)
+            config: Self.configuration(theme: theme, layout: layout, includesCustomActions: includesCustomActions)
         )
         super.init(nibName: nil, bundle: nil)
         navigator.delegate = self
@@ -86,10 +90,11 @@ final class NormalReadingNavigatorController: UIViewController {
     private static func configuration(
         theme: ReaderTheme,
         layout: NormalModeLayout,
-        includesBTRAction: Bool
+        includesCustomActions: Bool
     ) -> EPUBNavigatorViewController.Configuration {
         var editingActions = EditingAction.defaultActions
-        if includesBTRAction {
+        if includesCustomActions {
+            editingActions.append(saveQuoteEditingAction)
             editingActions.append(btrEditingAction)
         }
         return EPUBNavigatorViewController.Configuration(
@@ -106,9 +111,18 @@ final class NormalReadingNavigatorController: UIViewController {
     private static let btrEditingAction = EditingAction(
         title: "BTR", action: #selector(NormalReadingNavigatorController.triggerBTRAction))
 
+    private static let saveQuoteEditingAction = EditingAction(
+        title: "Save Quote", action: #selector(NormalReadingNavigatorController.triggerSaveQuoteAction))
+
     @objc private func triggerBTRAction() {
         guard let selection = navigator.currentSelection else { return }
         onBTRRequested?(selection)
+    }
+
+    @objc private func triggerSaveQuoteAction() {
+        guard let selection = navigator.currentSelection else { return }
+        onSaveQuoteRequested?(selection)
+        navigator.clearSelection()
     }
 }
 

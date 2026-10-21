@@ -51,16 +51,11 @@ enum DevSeeder {
     /// reseed) without deleting the app or resetting the simulator.
     @MainActor
     static func resetLibrary(context: ModelContext) {
-        let fileStorage = BookFileStorage()
+        let deleter = BookDeleter()
         let books = (try? context.fetch(FetchDescriptor<Book>())) ?? []
         for book in books {
-            fileStorage.deleteFile(atRelativePath: book.relativeFilePath)
-            if let coverPath = book.relativeCoverImagePath {
-                fileStorage.deleteFile(atRelativePath: coverPath)
-            }
-            context.delete(book)
+            try? deleter.delete(book, from: context)
         }
-        try? context.save()
     }
 }
 #endif

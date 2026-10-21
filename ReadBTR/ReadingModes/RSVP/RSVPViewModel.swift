@@ -40,6 +40,10 @@ final class RSVPViewModel {
     var isShowingSurroundingView = false
     var isShowingBTRMenu = false
 
+    /// Changes each time a quote is saved, so the view can flash a brief
+    /// "Quote saved" confirmation.
+    private(set) var quoteSavedConfirmationID: UUID?
+
     private let modelContext: ModelContext
     private let publicationLoader: PublicationLoader
     private let wordStreamCache = WordStreamCache()
@@ -160,6 +164,20 @@ final class RSVPViewModel {
     func showBTRTooltip() {
         pause()
         isShowingBTRTooltip = true
+    }
+
+    /// Saves the sentence around the current word as a `SavedQuote` and
+    /// hides the tooltip. RSVP only ever shows one word, so the sentence
+    /// is the natural unit to quote; its first and last words' locators
+    /// become the quote's start and end.
+    func saveQuote() {
+        isShowingBTRTooltip = false
+        guard let currentStream, let sentence = currentStream.sentence(around: currentIndex) else { return }
+        let start = currentStream.words[sentence.range.lowerBound].locator
+        let end = currentStream.words[sentence.range.upperBound].locator
+        if SavedQuoteWriter.save(text: sentence.text, start: start, end: end, book: book, in: modelContext) != nil {
+            quoteSavedConfirmationID = UUID()
+        }
     }
 
     /// Builds a fresh `BTRMenuViewModel` anchored at the current word, or
