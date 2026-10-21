@@ -161,7 +161,7 @@ private struct GuidedReadingContentView: View {
                     onDefine: { viewModel.isShowingDictionary = true },
                     onViewSurrounding: { viewModel.isShowingSurroundingView = true },
                     onSaveQuote: viewModel.selectionSpansMultipleWords ? { viewModel.saveQuote() } : nil,
-                    onBTR: { viewModel.isShowingBTRMenu = true }
+                    onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRMenu = true } : nil
                 )
                 .position(x: frame.midX, y: max(frame.minY - 40, 40))
                 .transition(.opacity)

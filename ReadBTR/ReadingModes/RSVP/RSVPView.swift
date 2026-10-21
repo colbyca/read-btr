@@ -144,7 +144,7 @@ private struct RSVPContentView: View {
                                 onDefine: { viewModel.isShowingDictionary = true },
                                 onViewSurrounding: { viewModel.isShowingSurroundingView = true },
                                 onSaveQuote: { viewModel.saveQuote() },
-                                onBTR: { viewModel.isShowingBTRMenu = true }
+                                onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRMenu = true } : nil
                             )
                             .offset(y: 64)
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))

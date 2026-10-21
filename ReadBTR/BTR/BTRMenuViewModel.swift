@@ -79,23 +79,6 @@ final class BTRMenuViewModel {
     let anchorLocator: Locator
     let theme: ReaderTheme
 
-    /// The AI features the reader has turned on for this book. The two
-    /// options this view model gates on it (comprehension checks and Q&A)
-    /// are hidden in the view and refuse to run when their key is missing.
-    let enabledFeatures: Set<AIFeatureKey>
-
-    /// The BTR features this menu can offer, in the order they appear.
-    static let menuFeatures: [AIFeatureKey] = [
-        .entityExtraction, .chapterSummary, .comprehensionCheck, .questionAnswering,
-    ]
-
-    /// The subset of `menuFeatures` turned on for `book` — master toggle,
-    /// per-book override, global flag, and a usable provider/key.
-    static func enabledMenuFeatures(for book: Book, modelContext: ModelContext) -> Set<AIFeatureKey> {
-        let settings = AppSettingsStore.current(in: modelContext)
-        return Set(menuFeatures.filter { book.isAIFeatureEnabled($0, settings) })
-    }
-
     private(set) var activePanel: BTRActivePanel = .none
 
     /// The current comprehension check, once one is loaded or generated.
@@ -135,6 +118,18 @@ final class BTRMenuViewModel {
     private(set) var selectedOptionTitle: String?
     private(set) var selectedOptionResult: BTRResultState<String> = .idle
 
+    /// Which BTR options the reader's settings allow for this book — the
+    /// master AI toggle, the global per-feature flags and any per-book
+    /// overrides, already resolved through `Book.isAIFeatureEnabled`.
+    /// Captured once at open time; the menu is short-lived and the
+    /// settings screen can't be reached from inside it.
+    let enabledFeatures: Set<AIFeatureKey>
+
+    var isEntityLookupEnabled: Bool { enabledFeatures.contains(.entityExtraction) }
+    var isChapterSummaryEnabled: Bool { enabledFeatures.contains(.chapterSummary) }
+    var isComprehensionCheckEnabled: Bool { enabledFeatures.contains(.comprehensionCheck) }
+    var isQuestionAnsweringEnabled: Bool { enabledFeatures.contains(.questionAnswering) }
+
     private let provider: AIProvider?
     private let modelContext: ModelContext
     private let wordStreamCache: WordStreamCache
@@ -161,6 +156,35 @@ final class BTRMenuViewModel {
         theme = book.effectiveTheme(AppSettingsStore.current(in: modelContext))
     }
 
+    /// The AI features that appear as options in this menu. A new menu
+    /// option adds its key here, and gates itself on `enabledFeatures`.
+    static let menuFeatures: [AIFeatureKey] = [
+        .entityExtraction, .chapterSummary, .comprehensionCheck, .questionAnswering,
+    ]
+
+    /// The one place every reading mode builds this menu from. Returns
+    /// `nil` when none of the menu's features are enabled for `book`, so
+    /// the reading modes can hide their BTR entry point instead of opening
+    /// an empty menu.
+    static func make(
+        book: Book, publication: Publication, anchorLocator: Locator, modelContext: ModelContext
+    ) -> BTRMenuViewModel? {
+        let appSettings = AppSettingsStore.current(in: modelContext)
+        let enabled = Set(menuFeatures.filter { book.isAIFeatureEnabled($0, appSettings) })
+        guard !enabled.isEmpty else { return nil }
+        let provider = AIProviderFactory.makeProvider(settings: appSettings, keyStore: AppSettings.keyStore)
+        return BTRMenuViewModel(
+            book: book, publication: publication, anchorLocator: anchorLocator, provider: provider,
+            enabledFeatures: enabled, modelContext: modelContext)
+    }
+
+    /// Whether the BTR entry point should be shown at all for `book` —
+    /// true when at least one of the menu's features is enabled.
+    static func isAvailable(for book: Book, modelContext: ModelContext) -> Bool {
+        let appSettings = AppSettingsStore.current(in: modelContext)
+        return menuFeatures.contains { book.isAIFeatureEnabled($0, appSettings) }
+    }
+
     /// Builds the preview pane's navigator, if it doesn't exist yet — safe
     /// to call repeatedly (e.g. from the view's `.task`, which can re-run).
     /// Failure here (a malformed publication) leaves the preview pane
@@ -183,7 +207,7 @@ final class BTRMenuViewModel {
     /// multiple times (e.g. from `.task`'s re-run on view identity change);
     /// only the first call past `.idle` actually does anything.
     func loadEntities() async {
-        guard case .idle = entitiesState else { return }
+        guard isEntityLookupEnabled, case .idle = entitiesState else { return }
 
         guard let provider else {
             entitiesState = .failed(BTRMenuViewModel.noProviderMessage)
@@ -215,6 +239,7 @@ final class BTRMenuViewModel {
     // MARK: - Step 2 — entity summary (§6.6.3)
 
     func selectEntity(_ entity: ExtractedEntity) async {
+        guard isEntityLookupEnabled else { return }
         activePanel = .textResult
         selectedOptionTitle = entity.name
         selectedOptionResult = .loading
@@ -262,6 +287,7 @@ final class BTRMenuViewModel {
     // MARK: - "Summarize since start of chapter" (§6.6.4)
 
     func summarizeChapter() async {
+        guard isChapterSummaryEnabled else { return }
         activePanel = .textResult
         selectedOptionTitle = "Summary So Far"
         selectedOptionResult = .loading
@@ -332,7 +358,7 @@ final class BTRMenuViewModel {
     /// the menu shows the reader's earlier answers instead of new
     /// questions. `forceNew` skips that and always generates a fresh set.
     func startComprehensionCheck(forceNew: Bool = false) async {
-        guard enabledFeatures.contains(.comprehensionCheck) else { return }
+        guard isComprehensionCheckEnabled else { return }
         activePanel = .comprehensionCheck
         comprehensionState = .loading
 
@@ -403,7 +429,7 @@ final class BTRMenuViewModel {
 
     /// Opens the Q&A panel without sending anything yet.
     func openQuestionAnswering() {
-        guard enabledFeatures.contains(.questionAnswering) else { return }
+        guard isQuestionAnsweringEnabled else { return }
         activePanel = .questionAnswering
     }
 
@@ -412,7 +438,7 @@ final class BTRMenuViewModel {
     /// anything ahead (dev.md §3). Earlier exchanges in this session are
     /// passed along so follow-up questions make sense.
     func askQuestion(_ rawQuestion: String) async {
-        guard enabledFeatures.contains(.questionAnswering) else { return }
+        guard isQuestionAnsweringEnabled else { return }
         let question = rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty, !isAnsweringQuestion else { return }
 

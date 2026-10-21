@@ -57,26 +57,32 @@ struct BTRMenuView: View {
 
     private var optionsPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            entityChipsSection
-
-            Button("Summarize Since Start of Chapter") {
-                Task { await viewModel.summarizeChapter() }
+            // Each option only appears when its AI feature is turned on
+            // (master toggle + per-feature flag + per-book override).
+            if viewModel.isEntityLookupEnabled {
+                entityChipsSection
             }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("btr-summarize-chapter")
 
-            if viewModel.enabledFeatures.contains(.comprehensionCheck)
-                || viewModel.enabledFeatures.contains(.questionAnswering)
+            if viewModel.isChapterSummaryEnabled {
+                Button("Summarize Since Start of Chapter") {
+                    Task { await viewModel.summarizeChapter() }
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("btr-summarize-chapter")
+            }
+
+            if viewModel.isComprehensionCheckEnabled
+                || viewModel.isQuestionAnsweringEnabled
             {
                 HStack(spacing: 8) {
-                    if viewModel.enabledFeatures.contains(.comprehensionCheck) {
+                    if viewModel.isComprehensionCheckEnabled {
                         Button("Check My Understanding") {
                             Task { await viewModel.startComprehensionCheck() }
                         }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("btr-comprehension-check")
                     }
-                    if viewModel.enabledFeatures.contains(.questionAnswering) {
+                    if viewModel.isQuestionAnsweringEnabled {
                         Button("Ask a Question") {
                             viewModel.openQuestionAnswering()
                         }
