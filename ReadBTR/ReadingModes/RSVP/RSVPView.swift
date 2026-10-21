@@ -143,6 +143,7 @@ private struct RSVPContentView: View {
                             BTRSelectionTooltip(
                                 onDefine: { viewModel.isShowingDictionary = true },
                                 onViewSurrounding: { viewModel.isShowingSurroundingView = true },
+                                onSaveQuote: { viewModel.saveQuote() },
                                 onBTR: { viewModel.isShowingBTRMenu = true }
                             )
                             .offset(y: 64)
@@ -165,6 +166,7 @@ private struct RSVPContentView: View {
             }
         }
         .animation(.default, value: viewModel.isShowingToolbar)
+        .quoteSavedToast(trigger: viewModel.quoteSavedConfirmationID)
     }
 
     /// RSVP's centered word is deliberately much larger than body reading

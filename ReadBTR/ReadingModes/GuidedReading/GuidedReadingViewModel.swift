@@ -48,6 +48,10 @@ final class GuidedReadingViewModel {
     var isShowingSurroundingView = false
     var isShowingBTRMenu = false
 
+    /// Changes each time a quote is saved, so the view can flash a brief
+    /// "Quote saved" confirmation.
+    private(set) var quoteSavedConfirmationID: UUID?
+
     /// Selecting more than one word swaps the tooltip's Define action for
     /// Save Quote (design-roadmap.md §6.6.1).
     var selectionSpansMultipleWords: Bool {
@@ -325,10 +329,9 @@ final class GuidedReadingViewModel {
     /// denormalized copy display actually reads from.
     func saveQuote() {
         guard let selection = currentSelection, let text = selection.locator.text.highlight else { return }
-        let locatorJSON = (try? selection.locator.jsonString()) ?? ""
-        let quote = SavedQuote(text: text, startLocatorJSON: locatorJSON, endLocatorJSON: locatorJSON, book: book)
-        modelContext.insert(quote)
-        try? modelContext.save()
+        if SavedQuoteWriter.save(text: text, start: selection.locator, book: book, in: modelContext) != nil {
+            quoteSavedConfirmationID = UUID()
+        }
         dismissSelection()
     }
 
