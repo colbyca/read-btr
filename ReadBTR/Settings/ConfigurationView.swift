@@ -29,6 +29,7 @@ struct ConfigurationView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
+                        .accessibilityIdentifier("settings-done")
                 }
             }
         }
