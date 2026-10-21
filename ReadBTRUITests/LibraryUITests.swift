@@ -32,8 +32,10 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(menuDelete.waitForExistence(timeout: 5))
         menuDelete.tap()
 
-        // The confirmation dialog repeats the action as its own button.
-        let confirmDelete = app.buttons["Delete Book"]
+        // The confirmation dialog has its own "Delete Book" button. SwiftUI
+        // exposes it twice in the accessibility tree (a button nested in a
+        // button, same identifier), so tap the first match by identifier.
+        let confirmDelete = app.buttons["confirm-delete-book"].firstMatch
         XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5))
         confirmDelete.tap()
 

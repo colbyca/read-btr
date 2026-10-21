@@ -35,7 +35,13 @@ final class ConfigurationViewUITests: XCTestCase {
         let toggledValue = aiToggle.value as? String
         XCTAssertNotEqual(initialValue, toggledValue, "toggling the switch didn't change its value")
 
-        app.buttons["Done"].tap()
+        // Scrolling down to the AI section pushes the navigation bar (and its
+        // Done button) off screen, so scroll back up before closing.
+        let doneButton = app.buttons["settings-done"]
+        for _ in 0..<8 where !doneButton.isHittable {
+            app.swipeDown()
+        }
+        doneButton.tap()
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
 
         // Reopen — the toggle should have kept its new state.

@@ -29,6 +29,8 @@ final class ReadBTRUITests: XCTestCase {
         screenshotPicker.lifetime = .keepAlways
         add(screenshotPicker)
 
-        app.buttons["Cancel"].tap()
+        // The picker can expose more than one "Cancel" button (e.g. its
+        // search field's), so tap the first.
+        app.buttons["Cancel"].firstMatch.tap()
     }
 }
