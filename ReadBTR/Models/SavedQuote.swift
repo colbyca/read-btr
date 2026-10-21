@@ -1,8 +1,11 @@
 import Foundation
 import SwiftData
 
-/// A user-saved quote — populated by Guided Reading's multi-word "save
-/// quote" action (design-roadmap.md §2.11, §6.6.1).
+/// A user-saved quote (design-roadmap.md §2.11, §6.6.1). Written through
+/// `SavedQuoteWriter` from every reading mode: Guided Reading's multi-word
+/// selection tooltip, Normal mode's native selection menu, and RSVP's
+/// long-press tooltip (which saves the sentence around the current word).
+/// Listed in `SavedQuotesView`.
 @Model
 final class SavedQuote {
     var id: UUID

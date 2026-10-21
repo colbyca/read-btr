@@ -8,12 +8,13 @@ import SwiftUI
 /// single custom action to the native selection menu instead, per the
 /// design doc's own wording.
 ///
-/// `showsSaveQuote` swaps the leading action from Define to Save Quote —
-/// Guided Reading's rule for a selection spanning more than one word
-/// (§6.6.1); RSVP never sets it, since a single centered word is always
-/// exactly one word.
+/// Which leading actions appear depends on the mode: Guided Reading shows
+/// Define for a single word and Save Quote for a multi-word selection
+/// (§6.6.1); RSVP shows both, since its Save Quote saves the sentence
+/// around the current word. Save Quote appears whenever `onSaveQuote` is
+/// set.
 struct BTRSelectionTooltip: View {
-    var showsSaveQuote: Bool = false
+    var showsDefine: Bool = true
     var showsViewSurrounding: Bool = true
     let onDefine: () -> Void
     var onViewSurrounding: (() -> Void)?
@@ -24,10 +25,11 @@ struct BTRSelectionTooltip: View {
 
     var body: some View {
         HStack(spacing: 20) {
-            if showsSaveQuote, let onSaveQuote {
-                action(systemImage: "quote.opening", label: "Save Quote", identifier: "save-quote", action: onSaveQuote)
-            } else {
+            if showsDefine {
                 action(systemImage: "character.book.closed", label: "Define", identifier: "define", action: onDefine)
+            }
+            if let onSaveQuote {
+                action(systemImage: "quote.opening", label: "Save Quote", identifier: "save-quote", action: onSaveQuote)
             }
             if showsViewSurrounding, let onViewSurrounding {
                 action(

@@ -157,3 +157,25 @@ struct RSVPViewModelTests {
         #expect(viewModel.isPlaying == false)
     }
 }
+
+// MARK: - Save Quote
+
+extension RSVPViewModelTests {
+    @Test func saveQuoteStoresTheSentenceAroundTheCurrentWord() async throws {
+        let (viewModel, context, cleanup) = try await Self.makeLoadedViewModel()
+        defer { cleanup() }
+
+        await viewModel.step(by: 5)
+        let currentWord = try #require(viewModel.currentWord)
+        viewModel.showBTRTooltip()
+
+        viewModel.saveQuote()
+
+        let quotes = try context.fetch(FetchDescriptor<SavedQuote>())
+        #expect(quotes.count == 1)
+        #expect(quotes.first?.text.contains(currentWord) == true)
+        #expect(quotes.first?.book === viewModel.book)
+        #expect(viewModel.isShowingBTRTooltip == false)
+        #expect(viewModel.quoteSavedConfirmationID != nil)
+    }
+}

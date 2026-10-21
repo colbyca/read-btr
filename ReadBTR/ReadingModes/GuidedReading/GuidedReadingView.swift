@@ -157,10 +157,10 @@ private struct GuidedReadingContentView: View {
             // shares exactly (both full-bleed, `.ignoresSafeArea()`).
             if let selection = viewModel.currentSelection, let frame = selection.frame {
                 BTRSelectionTooltip(
-                    showsSaveQuote: viewModel.selectionSpansMultipleWords,
+                    showsDefine: !viewModel.selectionSpansMultipleWords,
                     onDefine: { viewModel.isShowingDictionary = true },
                     onViewSurrounding: { viewModel.isShowingSurroundingView = true },
-                    onSaveQuote: { viewModel.saveQuote() },
+                    onSaveQuote: viewModel.selectionSpansMultipleWords ? { viewModel.saveQuote() } : nil,
                     onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRMenu = true } : nil
                 )
                 .position(x: frame.midX, y: max(frame.minY - 40, 40))
@@ -169,6 +169,7 @@ private struct GuidedReadingContentView: View {
             }
         }
         .animation(.default, value: viewModel.currentSelection != nil)
+        .quoteSavedToast(trigger: viewModel.quoteSavedConfirmationID)
     }
 }
 

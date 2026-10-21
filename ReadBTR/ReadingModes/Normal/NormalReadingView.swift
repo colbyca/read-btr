@@ -103,6 +103,7 @@ private struct NormalReadingScreen: View {
                                 BTRMenuView(viewModel: btrViewModel)
                             }
                         }
+                        .quoteSavedToast(trigger: viewModel.quoteSavedConfirmationID)
                 }
             }
         }
