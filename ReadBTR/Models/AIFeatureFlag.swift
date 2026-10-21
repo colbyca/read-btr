@@ -8,12 +8,14 @@ enum AIFeatureKey: String, Codable, CaseIterable {
     case chapterSummary
     case entityExtraction
     case comprehensionCheck
+    case questionAnswering
 
     var displayName: String {
         switch self {
         case .chapterSummary: "Chapter Summaries"
         case .entityExtraction: "Character & Location Lookup"
         case .comprehensionCheck: "Comprehension Checks"
+        case .questionAnswering: "Ask About the Book"
         }
     }
 }
