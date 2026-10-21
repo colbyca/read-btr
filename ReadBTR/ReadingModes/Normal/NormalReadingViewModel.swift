@@ -38,6 +38,10 @@ final class NormalReadingViewModel {
     private(set) var btrSelection: Selection?
     var isShowingBTRMenu = false
 
+    /// Changes each time a quote is saved, so the view can flash a brief
+    /// "Quote saved" confirmation.
+    private(set) var quoteSavedConfirmationID: UUID?
+
     private let modelContext: ModelContext
     private let fileStorage: BookFileStorage
     private let publicationLoader: PublicationLoader
@@ -112,6 +116,19 @@ final class NormalReadingViewModel {
         host.onBTRRequested = { [weak self] selection in
             self?.btrSelection = selection
             self?.isShowingBTRMenu = true
+        }
+        host.onSaveQuoteRequested = { [weak self] selection in
+            self?.saveQuote(from: selection)
+        }
+    }
+
+    /// Writes a `SavedQuote` for a native text selection. Like Guided
+    /// Reading, Readium's `Selection` has one locator, so it serves as both
+    /// the start and end boundary.
+    func saveQuote(from selection: Selection) {
+        guard let text = selection.locator.text.highlight else { return }
+        if SavedQuoteWriter.save(text: text, start: selection.locator, book: book, in: modelContext) != nil {
+            quoteSavedConfirmationID = UUID()
         }
     }
 
