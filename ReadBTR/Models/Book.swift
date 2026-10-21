@@ -48,6 +48,9 @@ final class Book {
     @Relationship(deleteRule: .cascade, inverse: \SavedQuote.book)
     var savedQuotes: [SavedQuote] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \ComprehensionCheck.book)
+    var comprehensionChecks: [ComprehensionCheck] = []
+
     init(
         id: UUID = UUID(),
         title: String,

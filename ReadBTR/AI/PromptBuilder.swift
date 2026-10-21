@@ -95,4 +95,125 @@ enum PromptBuilder {
         so far, based only on the text above. Plain prose, no headings or markdown.
         """
     }
+
+    // MARK: - Comprehension check (dev.md §3)
+
+    /// How many questions one check asks. dev.md §3 says "N questions";
+    /// three keeps a check quick enough to do between chapters.
+    static let comprehensionQuestionCount = 3
+
+    static func comprehensionCheckPrompt(
+        bookTitle: String, chapterText: String, questionCount: Int = comprehensionQuestionCount
+    ) -> String {
+        """
+        You are writing a short comprehension check for a reader of the book \
+        "\(bookTitle)". They have just read the chapter text below, and nothing past it.
+
+        Chapter text:
+        \"\"\"
+        \(chapterText)
+        \"\"\"
+
+        Write \(questionCount) multiple-choice questions that check whether the reader \
+        understood this text: what happened, why characters acted as they did, and \
+        how events connect. Avoid trivia about exact wording or minor details. Every \
+        question must be answerable from the text above alone; do not use any outside \
+        knowledge of the book, and never refer to events after this text.
+
+        Give each question exactly 4 answer choices, with one clearly correct choice \
+        and plausible wrong ones. Vary which position holds the correct choice. \
+        `correctChoiceIndex` is the 0-based index of the correct choice. \
+        `explanation` is one or two sentences saying why that choice is correct, \
+        based on the text.
+        """
+    }
+
+    /// Gemini `Schema` object, same conventions as
+    /// `entityExtractionSchema`. Decodes into `[ComprehensionQuestion]`
+    /// under a top-level `questions` key.
+    static var comprehensionCheckSchema: [String: Any] {
+        [
+            "type": "OBJECT",
+            "properties": [
+                "questions": [
+                    "type": "ARRAY",
+                    "items": [
+                        "type": "OBJECT",
+                        "properties": [
+                            "question": ["type": "STRING"],
+                            "choices": ["type": "ARRAY", "items": ["type": "STRING"]],
+                            "correctChoiceIndex": ["type": "INTEGER"],
+                            "explanation": ["type": "STRING"],
+                        ],
+                        "required": ["question", "choices", "correctChoiceIndex", "explanation"],
+                    ],
+                ]
+            ],
+            "required": ["questions"],
+        ]
+    }
+
+    // MARK: - Q&A (dev.md §3)
+
+    /// One earlier question and answer in the same Q&A session, passed back
+    /// in so follow-up questions ("why did she do that?") make sense.
+    struct QAHistoryItem: Equatable {
+        var question: String
+        var answer: String
+    }
+
+    /// How many earlier exchanges get sent along with a new question.
+    static let maxQAHistoryItems = 4
+
+    static func questionAnsweringPrompt(
+        bookTitle: String,
+        textSoFar: String,
+        textWasTruncated: Bool,
+        history: [QAHistoryItem],
+        question: String
+    ) -> String {
+        let truncationNote =
+            textWasTruncated
+            ? "The text below is only the most recent part of what the reader has read; earlier text was left out for length.\n\n"
+            : ""
+        let historyBlock: String
+        let recentHistory = history.suffix(maxQAHistoryItems)
+        if recentHistory.isEmpty {
+            historyBlock = ""
+        } else {
+            let lines = recentHistory.map { "Reader: \($0.question)\nYou: \($0.answer)" }.joined(separator: "\n\n")
+            historyBlock = """
+
+                Earlier in this conversation:
+                \"\"\"
+                \(lines)
+                \"\"\"
+
+                """
+        }
+
+        return """
+            You are a reading companion answering a question about the book \
+            "\(bookTitle)". The reader has read up to the end of the text below and no \
+            further.
+
+            \(truncationNote)Text the reader has read so far:
+            \"\"\"
+            \(textSoFar)
+            \"\"\"
+            \(historyBlock)
+            Reader's question: \(question)
+
+            Rules:
+            - Answer using only the text above. Do not use outside knowledge of this \
+            book's plot, characters, or ending, even if you know it.
+            - Never reveal, hint at, or speculate about anything that happens after \
+            the end of the text above. If the question can only be answered by later \
+            parts of the book, say that the reader hasn't reached that yet.
+            - If the text above doesn't answer the question, say so plainly instead of \
+            guessing.
+            - Keep the answer short: a few sentences of plain prose, no headings or \
+            markdown.
+            """
+    }
 }

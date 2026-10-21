@@ -9,7 +9,7 @@ struct ModelsTests {
     /// Fresh in-memory SwiftData container per test — no state leaks
     /// between tests, no real disk I/O.
     static func makeContext() throws -> ModelContext {
-        let schema = Schema([Book.self, AppSettings.self, ChapterSummary.self, EntityProfile.self, SavedQuote.self])
+        let schema = Schema([Book.self, AppSettings.self, ChapterSummary.self, EntityProfile.self, SavedQuote.self, ComprehensionCheck.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         return ModelContext(container)

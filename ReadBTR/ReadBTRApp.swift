@@ -13,6 +13,7 @@ struct ReadBTRApp: App {
             ChapterSummary.self,
             EntityProfile.self,
             SavedQuote.self,
+            ComprehensionCheck.self,
         ])
     }
 }
