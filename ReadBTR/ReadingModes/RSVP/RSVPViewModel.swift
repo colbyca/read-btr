@@ -187,11 +187,15 @@ final class RSVPViewModel {
     /// that ordering.
     func makeBTRMenuViewModel() -> BTRMenuViewModel? {
         guard let publication, let locator = currentWordLocator else { return nil }
-        let appSettings = AppSettingsStore.current(in: modelContext)
-        let provider = AIProviderFactory.makeProvider(settings: appSettings, keyStore: AppSettings.keyStore)
-        return BTRMenuViewModel(
-            book: book, publication: publication, anchorLocator: locator, provider: provider,
-            modelContext: modelContext)
+        return BTRMenuViewModel.make(
+            book: book, publication: publication, anchorLocator: locator, modelContext: modelContext)
+    }
+
+    /// Whether the reader's AI settings allow the BTR menu for this book —
+    /// the BTR entry point is hidden when they don't. Read live, so a
+    /// change made in the settings sheet mid-session takes effect at once.
+    var isBTRAvailable: Bool {
+        BTRMenuViewModel.isAvailable(for: book, modelContext: modelContext)
     }
 
     private func schedulePlayback() {

@@ -36,10 +36,29 @@ struct BTRMenuViewModelTests {
         let context: ModelContext
         let cleanup: () -> Void
 
-        func makeViewModel(provider: AIProvider?, anchorLocator: Locator? = nil) -> BTRMenuViewModel {
+        func makeViewModel(
+            provider: AIProvider?, anchorLocator: Locator? = nil,
+            enabledFeatures: Set<AIFeatureKey> = [.entityExtraction, .chapterSummary]
+        ) -> BTRMenuViewModel {
             BTRMenuViewModel(
                 book: book, publication: publication, anchorLocator: anchorLocator ?? self.anchorLocator,
-                provider: provider, modelContext: context)
+                provider: provider, enabledFeatures: enabledFeatures, modelContext: context)
+        }
+
+        func makeFromSettings() -> BTRMenuViewModel? {
+            BTRMenuViewModel.make(
+                book: book, publication: publication, anchorLocator: anchorLocator, modelContext: context)
+        }
+
+        /// Sets the global AI settings the way the Configuration screen
+        /// would: provider chosen, master toggle, and the per-feature flags.
+        func configureAI(masterOn: Bool, enabled: Set<AIFeatureKey>) {
+            let settings = AppSettingsStore.current(in: context)
+            settings.aiProvider = .gemini
+            settings.aiFeaturesMasterToggle = masterOn
+            settings.aiFeatureFlags = AIFeatureKey.allCases.map {
+                AIFeatureFlag(key: $0, isEnabled: enabled.contains($0))
+            }
         }
     }
 
@@ -274,5 +293,122 @@ struct BTRMenuViewModelTests {
         // Overwrote the existing row rather than creating a second one.
         #expect(fixture.book.chapterSummaries.count == 1)
         #expect(fixture.book.chapterSummaries.first?.content == "Fresh summary.")
+    }
+
+    // MARK: - AI feature toggles
+
+    @Test func makeReturnsNilWhenMasterToggleIsOff() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+        let previous = AppSettings.keyStore
+        defer { AppSettings.keyStore = previous }
+        AppSettings.keyStore = ModelsTests.FakeAIKeyStore(keys: [.gemini: "test-key"])
+
+        fixture.configureAI(masterOn: false, enabled: [.entityExtraction, .chapterSummary])
+
+        #expect(fixture.makeFromSettings() == nil)
+        #expect(BTRMenuViewModel.isAvailable(for: fixture.book, modelContext: fixture.context) == false)
+    }
+
+    @Test func makeReturnsNilWithoutAnAPIKeyEvenWhenTogglesAreOn() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+        let previous = AppSettings.keyStore
+        defer { AppSettings.keyStore = previous }
+        AppSettings.keyStore = ModelsTests.FakeAIKeyStore()
+
+        fixture.configureAI(masterOn: true, enabled: [.entityExtraction, .chapterSummary])
+
+        #expect(fixture.makeFromSettings() == nil)
+        #expect(BTRMenuViewModel.isAvailable(for: fixture.book, modelContext: fixture.context) == false)
+    }
+
+    @Test func makeReturnsNilWhenEveryMenuFeatureIsOff() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+        let previous = AppSettings.keyStore
+        defer { AppSettings.keyStore = previous }
+        AppSettings.keyStore = ModelsTests.FakeAIKeyStore(keys: [.gemini: "test-key"])
+
+        fixture.configureAI(masterOn: true, enabled: [])
+
+        #expect(fixture.makeFromSettings() == nil)
+        #expect(BTRMenuViewModel.isAvailable(for: fixture.book, modelContext: fixture.context) == false)
+    }
+
+    @Test func makeOnlyEnablesTheFeaturesThatAreTurnedOn() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+        let previous = AppSettings.keyStore
+        defer { AppSettings.keyStore = previous }
+        AppSettings.keyStore = ModelsTests.FakeAIKeyStore(keys: [.gemini: "test-key"])
+
+        fixture.configureAI(masterOn: true, enabled: [.chapterSummary])
+
+        let viewModel = try #require(fixture.makeFromSettings())
+        #expect(viewModel.isChapterSummaryEnabled == true)
+        #expect(viewModel.isEntityLookupEnabled == false)
+        #expect(BTRMenuViewModel.isAvailable(for: fixture.book, modelContext: fixture.context) == true)
+    }
+
+    @Test func perBookOverrideCanTurnTheMenuOffForOneBook() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+        let previous = AppSettings.keyStore
+        defer { AppSettings.keyStore = previous }
+        AppSettings.keyStore = ModelsTests.FakeAIKeyStore(keys: [.gemini: "test-key"])
+
+        fixture.configureAI(masterOn: true, enabled: [.entityExtraction, .chapterSummary])
+        fixture.book.settingsOverride = BookSettingsOverride(aiFeatureFlagOverrides: [
+            AIFeatureFlag(key: .entityExtraction, isEnabled: false),
+            AIFeatureFlag(key: .chapterSummary, isEnabled: false),
+        ])
+
+        #expect(fixture.makeFromSettings() == nil)
+        #expect(BTRMenuViewModel.isAvailable(for: fixture.book, modelContext: fixture.context) == false)
+    }
+
+    @Test func loadEntitiesDoesNothingWhenEntityLookupIsOff() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+
+        let provider = MockAIProvider()
+        provider.textToReturn = #"{"entities":[{"name":"Alice","kind":"character"}]}"#
+        let viewModel = fixture.makeViewModel(provider: provider, enabledFeatures: [.chapterSummary])
+
+        await viewModel.loadEntities()
+
+        #expect(viewModel.entitiesState == .idle)
+        #expect(provider.promptsReceived.isEmpty)
+    }
+
+    @Test func selectEntityDoesNothingWhenEntityLookupIsOff() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+
+        let provider = MockAIProvider()
+        provider.textToReturn = "Alice is the protagonist."
+        let viewModel = fixture.makeViewModel(provider: provider, enabledFeatures: [.chapterSummary])
+
+        await viewModel.selectEntity(ExtractedEntity(name: "Alice", kind: .character))
+
+        #expect(viewModel.selectedOptionResult == .idle)
+        #expect(provider.promptsReceived.isEmpty)
+        #expect(fixture.book.entityProfiles.isEmpty)
+    }
+
+    @Test func summarizeChapterDoesNothingWhenChapterSummaryIsOff() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+
+        let provider = MockAIProvider()
+        provider.textToReturn = "Should never be returned."
+        let viewModel = fixture.makeViewModel(provider: provider, enabledFeatures: [.entityExtraction])
+
+        await viewModel.summarizeChapter()
+
+        #expect(viewModel.selectedOptionResult == .idle)
+        #expect(provider.promptsReceived.isEmpty)
+        #expect(fixture.book.chapterSummaries.isEmpty)
     }
 }

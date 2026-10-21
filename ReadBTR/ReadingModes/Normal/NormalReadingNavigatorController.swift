@@ -42,14 +42,18 @@ final class NormalReadingNavigatorController: UIViewController {
     /// appended to the native selection edit menu. `false` only for the read-only preview pane `BTRMenuViewModel.preparePreview()`
     /// embeds inside the BTR menu itself — without this, selecting text
     /// there could open a second BTR menu on top of the first.
+    /// `includesBTRAction` drops just the "BTR" entry, for when the
+    /// reader's AI settings don't allow the BTR menu for this book.
     init(
         publication: Publication, initialLocation: Locator?, theme: ReaderTheme, layout: NormalModeLayout,
-        includesCustomActions: Bool = true
+        includesCustomActions: Bool = true, includesBTRAction: Bool = true
     ) throws {
         navigator = try EPUBNavigatorViewController(
             publication: publication,
             initialLocation: initialLocation,
-            config: Self.configuration(theme: theme, layout: layout, includesCustomActions: includesCustomActions)
+            config: Self.configuration(
+                theme: theme, layout: layout, includesCustomActions: includesCustomActions,
+                includesBTRAction: includesBTRAction)
         )
         super.init(nibName: nil, bundle: nil)
         navigator.delegate = self
@@ -90,12 +94,15 @@ final class NormalReadingNavigatorController: UIViewController {
     private static func configuration(
         theme: ReaderTheme,
         layout: NormalModeLayout,
-        includesCustomActions: Bool
+        includesCustomActions: Bool,
+        includesBTRAction: Bool
     ) -> EPUBNavigatorViewController.Configuration {
         var editingActions = EditingAction.defaultActions
         if includesCustomActions {
             editingActions.append(saveQuoteEditingAction)
-            editingActions.append(btrEditingAction)
+            if includesBTRAction {
+                editingActions.append(btrEditingAction)
+            }
         }
         return EPUBNavigatorViewController.Configuration(
             preferences: EPUBThemePreferences.make(for: theme, scroll: layout == .scrolling),
