@@ -56,13 +56,19 @@ struct BTRMenuView: View {
 
     private var optionsPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            entityChipsSection
-
-            Button("Summarize Since Start of Chapter") {
-                Task { await viewModel.summarizeChapter() }
+            // Each option only appears when its AI feature is turned on
+            // (master toggle + per-feature flag + per-book override).
+            if viewModel.isEntityLookupEnabled {
+                entityChipsSection
             }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("btr-summarize-chapter")
+
+            if viewModel.isChapterSummaryEnabled {
+                Button("Summarize Since Start of Chapter") {
+                    Task { await viewModel.summarizeChapter() }
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("btr-summarize-chapter")
+            }
 
             if viewModel.selectedOptionResult != .idle {
                 Divider()

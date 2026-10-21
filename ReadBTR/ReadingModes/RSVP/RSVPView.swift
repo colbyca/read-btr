@@ -143,7 +143,7 @@ private struct RSVPContentView: View {
                             BTRSelectionTooltip(
                                 onDefine: { viewModel.isShowingDictionary = true },
                                 onViewSurrounding: { viewModel.isShowingSurroundingView = true },
-                                onBTR: { viewModel.isShowingBTRMenu = true }
+                                onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRMenu = true } : nil
                             )
                             .offset(y: 64)
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))

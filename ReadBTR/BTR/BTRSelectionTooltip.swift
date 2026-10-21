@@ -18,7 +18,9 @@ struct BTRSelectionTooltip: View {
     let onDefine: () -> Void
     var onViewSurrounding: (() -> Void)?
     var onSaveQuote: (() -> Void)?
-    let onBTR: () -> Void
+    /// `nil` hides the BTR action — the reader's AI settings don't allow
+    /// the BTR menu for this book.
+    var onBTR: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 20) {
@@ -32,7 +34,9 @@ struct BTRSelectionTooltip: View {
                     systemImage: "text.book.closed", label: "View Surrounding", identifier: "view-surrounding",
                     action: onViewSurrounding)
             }
-            action(systemImage: "sparkles", label: "BTR", identifier: "btr", action: onBTR)
+            if let onBTR {
+                action(systemImage: "sparkles", label: "BTR", identifier: "btr", action: onBTR)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

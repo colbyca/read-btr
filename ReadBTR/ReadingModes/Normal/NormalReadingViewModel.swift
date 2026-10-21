@@ -82,7 +82,10 @@ final class NormalReadingViewModel {
                 publication: publication,
                 initialLocation: book.currentLocator,
                 theme: theme,
-                layout: settings.layout
+                layout: settings.layout,
+                // The edit-menu entry is fixed once the navigator is built;
+                // `onBTRRequested` re-checks in case settings change later.
+                includesBTRAction: isBTRAvailable
             )
             wireNavigatorCallbacks(host)
             navigatorHost = host
@@ -110,8 +113,9 @@ final class NormalReadingViewModel {
             self?.isShowingToolbar = true
         }
         host.onBTRRequested = { [weak self] selection in
-            self?.btrSelection = selection
-            self?.isShowingBTRMenu = true
+            guard let self, self.isBTRAvailable else { return }
+            self.btrSelection = selection
+            self.isShowingBTRMenu = true
         }
     }
 
@@ -121,11 +125,15 @@ final class NormalReadingViewModel {
     /// this stays defensive rather than assuming that ordering).
     func makeBTRMenuViewModel() -> BTRMenuViewModel? {
         guard let publication, let locator = btrSelection?.locator else { return nil }
-        let appSettings = AppSettingsStore.current(in: modelContext)
-        let provider = AIProviderFactory.makeProvider(settings: appSettings, keyStore: AppSettings.keyStore)
-        return BTRMenuViewModel(
-            book: book, publication: publication, anchorLocator: locator, provider: provider,
-            modelContext: modelContext)
+        return BTRMenuViewModel.make(
+            book: book, publication: publication, anchorLocator: locator, modelContext: modelContext)
+    }
+
+    /// Whether the reader's AI settings allow the BTR menu for this book —
+    /// the BTR entry point is hidden when they don't. Read live, so a
+    /// change made in the settings sheet mid-session takes effect at once.
+    var isBTRAvailable: Bool {
+        BTRMenuViewModel.isAvailable(for: book, modelContext: modelContext)
     }
 
     /// Re-reads this book's *current* effective theme/settings and pushes
