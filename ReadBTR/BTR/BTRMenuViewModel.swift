@@ -21,6 +21,35 @@ private struct EntityExtractionResponse: Decodable {
     var entities: [ExtractedEntity]
 }
 
+/// Mirrors `PromptBuilder.comprehensionCheckSchema`.
+private struct ComprehensionCheckResponse: Decodable {
+    var questions: [ComprehensionQuestion]
+}
+
+/// Which of the BTR options currently owns the bottom result area — only
+/// one is shown at a time.
+enum BTRActivePanel: Equatable {
+    case none
+    /// An entity summary or the chapter summary (`selectedOptionResult`).
+    case textResult
+    case comprehensionCheck
+    case questionAnswering
+}
+
+/// One question the reader asked in the Q&A panel and its answer.
+/// Session-only: Q&A isn't persisted, unlike comprehension checks.
+struct BTRQAExchange: Identifiable, Equatable {
+    let id: UUID
+    var question: String
+    var answer: BTRResultState<String>
+
+    init(id: UUID = UUID(), question: String, answer: BTRResultState<String> = .loading) {
+        self.id = id
+        self.question = question
+        self.answer = answer
+    }
+}
+
 /// Shared "pending → result" shape for both BTR options (design-roadmap.md
 /// §6.6.3/§6.6.4: "one shared component, not two bespoke implementations")
 /// and for the automatic entity-extraction step itself.
@@ -49,6 +78,40 @@ final class BTRMenuViewModel {
     let publication: Publication
     let anchorLocator: Locator
     let theme: ReaderTheme
+
+    /// The AI features the reader has turned on for this book. The two
+    /// options this view model gates on it (comprehension checks and Q&A)
+    /// are hidden in the view and refuse to run when their key is missing.
+    let enabledFeatures: Set<AIFeatureKey>
+
+    /// The BTR features this menu can offer, in the order they appear.
+    static let menuFeatures: [AIFeatureKey] = [
+        .entityExtraction, .chapterSummary, .comprehensionCheck, .questionAnswering,
+    ]
+
+    /// The subset of `menuFeatures` turned on for `book` — master toggle,
+    /// per-book override, global flag, and a usable provider/key.
+    static func enabledMenuFeatures(for book: Book, modelContext: ModelContext) -> Set<AIFeatureKey> {
+        let settings = AppSettingsStore.current(in: modelContext)
+        return Set(menuFeatures.filter { book.isAIFeatureEnabled($0, settings) })
+    }
+
+    private(set) var activePanel: BTRActivePanel = .none
+
+    /// The current comprehension check, once one is loaded or generated.
+    private(set) var comprehensionState: BTRResultState<ComprehensionCheck> = .idle
+
+    /// The Q&A conversation for this menu session, oldest first.
+    private(set) var qaExchanges: [BTRQAExchange] = []
+    var isAnsweringQuestion: Bool {
+        if case .loading = qaExchanges.last?.answer { return true }
+        return false
+    }
+
+    /// The read-so-far text, extracted once on the first question and
+    /// reused for follow-ups — the anchor doesn't move while the menu is
+    /// open, so neither does the text.
+    private var readSoFarText: BTRReadSoFarTextExtractor.Result?
 
     private(set) var entitiesState: BTRResultState<[ExtractedEntity]> = .idle
 
@@ -84,6 +147,7 @@ final class BTRMenuViewModel {
         publication: Publication,
         anchorLocator: Locator,
         provider: AIProvider?,
+        enabledFeatures: Set<AIFeatureKey>,
         modelContext: ModelContext,
         wordStreamCache: WordStreamCache = WordStreamCache()
     ) {
@@ -91,6 +155,7 @@ final class BTRMenuViewModel {
         self.publication = publication
         self.anchorLocator = anchorLocator
         self.provider = provider
+        self.enabledFeatures = enabledFeatures
         self.modelContext = modelContext
         self.wordStreamCache = wordStreamCache
         theme = book.effectiveTheme(AppSettingsStore.current(in: modelContext))
@@ -150,6 +215,7 @@ final class BTRMenuViewModel {
     // MARK: - Step 2 — entity summary (§6.6.3)
 
     func selectEntity(_ entity: ExtractedEntity) async {
+        activePanel = .textResult
         selectedOptionTitle = entity.name
         selectedOptionResult = .loading
 
@@ -196,6 +262,7 @@ final class BTRMenuViewModel {
     // MARK: - "Summarize since start of chapter" (§6.6.4)
 
     func summarizeChapter() async {
+        activePanel = .textResult
         selectedOptionTitle = "Summary So Far"
         selectedOptionResult = .loading
 
@@ -243,14 +310,151 @@ final class BTRMenuViewModel {
     /// unparseable cached locator/missing progression is treated as stale
     /// defensively rather than trusted.
     private func isStale(_ summary: ChapterSummary) -> Bool {
+        isStale(sourceEndLocatorJSON: summary.sourceEndLocatorJSON)
+    }
+
+    private func isStale(sourceEndLocatorJSON: String) -> Bool {
         guard
-            let cachedLocator = try? Locator(jsonString: summary.sourceEndLocatorJSON),
+            let cachedLocator = try? Locator(jsonString: sourceEndLocatorJSON),
             let cachedProgression = cachedLocator.locations.progression
         else {
             return true
         }
         let currentProgression = anchorLocator.locations.progression ?? 0
         return currentProgression > cachedProgression
+    }
+
+    // MARK: - Comprehension check (dev.md §3)
+
+    /// Shows a comprehension check for the current chapter. Reuses the most
+    /// recent saved check for this chapter if it still covers the reader's
+    /// position (same staleness rule as chapter summaries), so reopening
+    /// the menu shows the reader's earlier answers instead of new
+    /// questions. `forceNew` skips that and always generates a fresh set.
+    func startComprehensionCheck(forceNew: Bool = false) async {
+        guard enabledFeatures.contains(.comprehensionCheck) else { return }
+        activePanel = .comprehensionCheck
+        comprehensionState = .loading
+
+        let chapterHref = anchorLocator.href.string
+        if !forceNew,
+            let cached = book.comprehensionChecks
+                .filter({ $0.chapterHref == chapterHref })
+                .max(by: { $0.generatedAt < $1.generatedAt }),
+            !isStale(sourceEndLocatorJSON: cached.sourceEndLocatorJSON)
+        {
+            comprehensionState = .result(cached)
+            return
+        }
+
+        guard let provider else {
+            comprehensionState = .failed(BTRMenuViewModel.noProviderMessage)
+            return
+        }
+
+        guard let chapterText = await BTRChapterTextExtractor.extractText(upTo: anchorLocator, in: publication) else {
+            comprehensionState = .failed("Couldn't find any text in this chapter.")
+            return
+        }
+
+        do {
+            let prompt = PromptBuilder.comprehensionCheckPrompt(bookTitle: book.title, chapterText: chapterText)
+            let responseText = try await provider.generateText(
+                prompt: prompt, responseSchema: .json(schema: PromptBuilder.comprehensionCheckSchema))
+            guard let data = responseText.data(using: .utf8) else { throw AIProviderError.decodingFailed }
+            let decoded = try JSONDecoder().decode(ComprehensionCheckResponse.self, from: data)
+
+            // Drop anything malformed, and never trust a stray pre-filled
+            // answer from the model.
+            let questions = decoded.questions
+                .filter(\.isWellFormed)
+                .prefix(PromptBuilder.comprehensionQuestionCount)
+                .map { question -> ComprehensionQuestion in
+                    var cleaned = question
+                    cleaned.selectedChoiceIndex = nil
+                    return cleaned
+                }
+            guard !questions.isEmpty else { throw AIProviderError.decodingFailed }
+
+            let check = ComprehensionCheck(
+                chapterHref: chapterHref,
+                sourceEndLocatorJSON: (try? anchorLocator.jsonString()) ?? "",
+                questions: Array(questions),
+                book: book
+            )
+            modelContext.insert(check)
+            try? modelContext.save()
+
+            comprehensionState = .result(check)
+        } catch {
+            comprehensionState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Records the reader's answer to one question of the current check.
+    func answerComprehensionQuestion(at questionIndex: Int, choiceIndex: Int) {
+        guard case .result(let check) = comprehensionState else { return }
+        if check.recordAnswer(questionIndex: questionIndex, choiceIndex: choiceIndex) {
+            try? modelContext.save()
+        }
+    }
+
+    // MARK: - Q&A (dev.md §3)
+
+    /// Opens the Q&A panel without sending anything yet.
+    func openQuestionAnswering() {
+        guard enabledFeatures.contains(.questionAnswering) else { return }
+        activePanel = .questionAnswering
+    }
+
+    /// Answers a question about the book using only the text from the
+    /// start of the book up to the anchor position, so answers can't spoil
+    /// anything ahead (dev.md §3). Earlier exchanges in this session are
+    /// passed along so follow-up questions make sense.
+    func askQuestion(_ rawQuestion: String) async {
+        guard enabledFeatures.contains(.questionAnswering) else { return }
+        let question = rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty, !isAnsweringQuestion else { return }
+
+        activePanel = .questionAnswering
+        let history: [PromptBuilder.QAHistoryItem] = qaExchanges.compactMap { exchange in
+            guard case .result(let answer) = exchange.answer else { return nil }
+            return PromptBuilder.QAHistoryItem(question: exchange.question, answer: answer)
+        }
+        let exchange = BTRQAExchange(question: question)
+        qaExchanges.append(exchange)
+
+        guard let provider else {
+            setAnswer(.failed(BTRMenuViewModel.noProviderMessage), for: exchange.id)
+            return
+        }
+
+        if readSoFarText == nil {
+            readSoFarText = await BTRReadSoFarTextExtractor.extractText(upTo: anchorLocator, in: publication)
+        }
+        guard let readSoFarText else {
+            setAnswer(.failed("Couldn't find any text up to this point."), for: exchange.id)
+            return
+        }
+
+        do {
+            let prompt = PromptBuilder.questionAnsweringPrompt(
+                bookTitle: book.title,
+                textSoFar: readSoFarText.text,
+                textWasTruncated: readSoFarText.wasTruncated,
+                history: history,
+                question: question
+            )
+            let answer = try await provider.generateText(prompt: prompt, responseSchema: .plainText)
+            setAnswer(.result(answer.trimmingCharacters(in: .whitespacesAndNewlines)), for: exchange.id)
+        } catch {
+            setAnswer(.failed(error.localizedDescription), for: exchange.id)
+        }
+    }
+
+    private func setAnswer(_ answer: BTRResultState<String>, for exchangeID: UUID) {
+        guard let index = qaExchanges.firstIndex(where: { $0.id == exchangeID }) else { return }
+        qaExchanges[index].answer = answer
     }
 
     private static let noProviderMessage = "AI features aren't set up — add a provider and API key in Settings."

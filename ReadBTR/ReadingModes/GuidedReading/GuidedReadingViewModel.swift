@@ -341,6 +341,7 @@ final class GuidedReadingViewModel {
         let provider = AIProviderFactory.makeProvider(settings: appSettings, keyStore: AppSettings.keyStore)
         return BTRMenuViewModel(
             book: book, publication: publication, anchorLocator: locator, provider: provider,
+            enabledFeatures: BTRMenuViewModel.enabledMenuFeatures(for: book, modelContext: modelContext),
             modelContext: modelContext)
     }
 

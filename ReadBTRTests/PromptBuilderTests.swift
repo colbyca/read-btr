@@ -53,4 +53,55 @@ struct PromptBuilderTests {
         #expect(prompt.contains("Alice in Wonderland"))
         #expect(prompt.contains("Alice fell down the rabbit hole."))
     }
+
+    // MARK: - Comprehension check
+
+    @Test func comprehensionCheckPromptEmbedsTitleTextAndCount() {
+        let prompt = PromptBuilder.comprehensionCheckPrompt(
+            bookTitle: "Alice in Wonderland", chapterText: "Alice fell down the hole.", questionCount: 5)
+        #expect(prompt.contains("Alice in Wonderland"))
+        #expect(prompt.contains("Alice fell down the hole."))
+        #expect(prompt.contains("Write 5 multiple-choice questions"))
+    }
+
+    @Test func comprehensionCheckSchemaDecodesIntoQuestions() throws {
+        let schema = PromptBuilder.comprehensionCheckSchema
+        let properties = try #require(schema["properties"] as? [String: Any])
+        let questions = try #require(properties["questions"] as? [String: Any])
+        #expect(questions["type"] as? String == "ARRAY")
+        let items = try #require(questions["items"] as? [String: Any])
+        let required = try #require(items["required"] as? [String])
+        #expect(Set(required) == ["question", "choices", "correctChoiceIndex", "explanation"])
+
+        // The model's JSON (without a selected answer) decodes cleanly.
+        let json = #"{"question":"Q?","choices":["A","B"],"correctChoiceIndex":1,"explanation":"B."}"#
+        let decoded = try JSONDecoder().decode(ComprehensionQuestion.self, from: Data(json.utf8))
+        #expect(decoded.isWellFormed)
+        #expect(decoded.selectedChoiceIndex == nil)
+    }
+
+    // MARK: - Q&A
+
+    @Test func questionAnsweringPromptEmbedsTextAndQuestion() {
+        let prompt = PromptBuilder.questionAnsweringPrompt(
+            bookTitle: "Alice in Wonderland", textSoFar: "The Rabbit took a watch out of its pocket.",
+            textWasTruncated: false, history: [], question: "What did the Rabbit carry?")
+        #expect(prompt.contains("Alice in Wonderland"))
+        #expect(prompt.contains("The Rabbit took a watch out of its pocket."))
+        #expect(prompt.contains("What did the Rabbit carry?"))
+        #expect(!prompt.contains("Earlier in this conversation"))
+        #expect(!prompt.contains("earlier text was left out"))
+    }
+
+    @Test func questionAnsweringPromptIncludesRecentHistoryAndTruncationNote() {
+        let history = (1...6).map { PromptBuilder.QAHistoryItem(question: "Q\($0)?", answer: "A\($0).") }
+        let prompt = PromptBuilder.questionAnsweringPrompt(
+            bookTitle: "Alice", textSoFar: "Text.", textWasTruncated: true, history: history, question: "Next?")
+        #expect(prompt.contains("earlier text was left out"))
+        #expect(prompt.contains("Earlier in this conversation"))
+        // Only the most recent `maxQAHistoryItems` exchanges are sent.
+        #expect(!prompt.contains("Q2?"))
+        #expect(prompt.contains("Q3?"))
+        #expect(prompt.contains("A6."))
+    }
 }

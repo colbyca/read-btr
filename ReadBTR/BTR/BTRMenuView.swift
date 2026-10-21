@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The BTR menu screen (design-roadmap.md §6.6.2): a vertical split — a
 /// read-only preview of the book centered on the position the menu was
-/// opened at, and a bottom "BTR options" panel (entity chips + "Summarize
-/// since start of chapter"). Presented via `.fullScreenCover`/`.sheet` from
+/// opened at, and a bottom "BTR options" panel (entity chips, "Summarize
+/// since start of chapter", and — when turned on — a comprehension check
+/// and Q&A). Presented via `.fullScreenCover`/`.sheet` from
 /// whichever reading mode's BTR icon triggered it; the back arrow just
 /// `dismiss()`s — none of the three modes auto-resume playback on their
 /// own dismiss handlers, so returning here leaves them exactly as paused as
@@ -64,10 +65,57 @@ struct BTRMenuView: View {
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("btr-summarize-chapter")
 
-            if viewModel.selectedOptionResult != .idle {
-                Divider()
-                BTRResultPanel(title: viewModel.selectedOptionTitle, state: viewModel.selectedOptionResult)
+            if viewModel.enabledFeatures.contains(.comprehensionCheck)
+                || viewModel.enabledFeatures.contains(.questionAnswering)
+            {
+                HStack(spacing: 8) {
+                    if viewModel.enabledFeatures.contains(.comprehensionCheck) {
+                        Button("Check My Understanding") {
+                            Task { await viewModel.startComprehensionCheck() }
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("btr-comprehension-check")
+                    }
+                    if viewModel.enabledFeatures.contains(.questionAnswering) {
+                        Button("Ask a Question") {
+                            viewModel.openQuestionAnswering()
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("btr-ask-question")
+                    }
+                }
             }
+
+            activePanelContent
+        }
+    }
+
+    @ViewBuilder
+    private var activePanelContent: some View {
+        switch viewModel.activePanel {
+        case .none:
+            EmptyView()
+        case .textResult:
+            Divider()
+            BTRResultPanel(title: viewModel.selectedOptionTitle, state: viewModel.selectedOptionResult)
+        case .comprehensionCheck:
+            Divider()
+            BTRComprehensionCheckPanel(
+                state: viewModel.comprehensionState,
+                onAnswer: { questionIndex, choiceIndex in
+                    viewModel.answerComprehensionQuestion(at: questionIndex, choiceIndex: choiceIndex)
+                },
+                onNewQuestions: {
+                    Task { await viewModel.startComprehensionCheck(forceNew: true) }
+                })
+        case .questionAnswering:
+            Divider()
+            BTRQuestionAnsweringPanel(
+                exchanges: viewModel.qaExchanges,
+                isAnswering: viewModel.isAnsweringQuestion,
+                onAsk: { question in
+                    Task { await viewModel.askQuestion(question) }
+                })
         }
     }
 

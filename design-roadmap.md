@@ -716,6 +716,37 @@ Both options follow the same UI shape: selecting an option swaps the bottom
 panel for a loading indicator, then swaps that for the result — one shared
 "pending → result" component in `BTR/`, not two bespoke implementations.
 
+#### 6.6.5 Comprehension checks and Q&A (dev.md §3)
+
+Both are extra BTR options, shown only when their `AIFeatureKey`
+(`.comprehensionCheck`, `.questionAnswering`) is on for the book.
+
+**Comprehension check** ("Check My Understanding"):
+1. Range is the same as §6.6.4: `[start of current resource, current
+   locator]`, so a check never asks about text the reader hasn't reached.
+2. Reuse the newest saved `ComprehensionCheck` for this chapter if it still
+   covers the reader's position (same staleness rule as `ChapterSummary`),
+   so reopening the menu shows earlier answers. "New Questions" forces a
+   fresh set.
+3. Otherwise one `generateText` call with `.json(schema:)` asking for 3
+   multiple-choice questions (`question`, 4 `choices`, `correctChoiceIndex`,
+   `explanation`). Malformed questions are dropped; the rest are saved as a
+   new `ComprehensionCheck` row.
+4. Tapping a choice locks it in (first answer wins), marks it right/wrong and
+   shows the explanation. `completedAt` is set once every question is
+   answered, so saved checks can feed a later "review what you've read"
+   feature.
+
+**Q&A** ("Ask a Question"):
+1. Context is all text from the start of the book up to the anchor locator
+   (`BTRReadSoFarTextExtractor`) — dev.md §3's spoiler rule. Capped at
+   600k characters (~150k tokens), keeping the most recent text, to bound
+   per-question cost on the reader's own key.
+2. One `.plainText` call per question. The prompt forbids outside knowledge
+   of the book's plot and anything past the given text, and passes the last
+   4 exchanges so follow-ups make sense.
+3. Exchanges live only for the menu session; they aren't persisted.
+
 ---
 
 ## 7. Persistence & caching
