@@ -1,0 +1,4 @@
+#!/bin/sh
+# $3 is 1 for branch checkouts, 0 for single-file checkouts.
+[ "$3" = "1" ] || exit 0
+exec "$(dirname "$0")/regenerate-project"
