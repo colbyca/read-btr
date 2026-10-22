@@ -34,6 +34,11 @@ final class NormalReadingNavigatorController: UIViewController {
     /// menu — Normal mode's equivalent of Guided Reading's tooltip action.
     var onSaveQuoteRequested: ((Selection) -> Void)?
 
+    /// Asked each time the edit menu is built for a selection, so the "BTR"
+    /// entry follows the reader's AI settings live (e.g. AI turned on from
+    /// the settings sheet mid-session) instead of being fixed at init.
+    var isBTRActionAvailable: () -> Bool = { true }
+
     /// Height of the tap-to-reveal-toolbar zone, in points, measured from
     /// the top of the navigator's own view.
     private static let topTapZoneHeight: CGFloat = 80
@@ -42,18 +47,17 @@ final class NormalReadingNavigatorController: UIViewController {
     /// appended to the native selection edit menu. `false` only for the read-only preview pane `BTRMenuViewModel.preparePreview()`
     /// embeds inside the BTR menu itself — without this, selecting text
     /// there could open a second BTR menu on top of the first.
-    /// `includesBTRAction` drops just the "BTR" entry, for when the
-    /// reader's AI settings don't allow the BTR menu for this book.
+    /// Whether "BTR" itself shows is decided per selection by
+    /// `isBTRActionAvailable`.
     init(
         publication: Publication, initialLocation: Locator?, theme: ReaderTheme, layout: NormalModeLayout,
-        includesCustomActions: Bool = true, includesBTRAction: Bool = true
+        includesCustomActions: Bool = true
     ) throws {
         navigator = try EPUBNavigatorViewController(
             publication: publication,
             initialLocation: initialLocation,
             config: Self.configuration(
-                theme: theme, layout: layout, includesCustomActions: includesCustomActions,
-                includesBTRAction: includesBTRAction)
+                theme: theme, layout: layout, includesCustomActions: includesCustomActions)
         )
         super.init(nibName: nil, bundle: nil)
         navigator.delegate = self
@@ -94,15 +98,12 @@ final class NormalReadingNavigatorController: UIViewController {
     private static func configuration(
         theme: ReaderTheme,
         layout: NormalModeLayout,
-        includesCustomActions: Bool,
-        includesBTRAction: Bool
+        includesCustomActions: Bool
     ) -> EPUBNavigatorViewController.Configuration {
         var editingActions = EditingAction.defaultActions
         if includesCustomActions {
             editingActions.append(saveQuoteEditingAction)
-            if includesBTRAction {
-                editingActions.append(btrEditingAction)
-            }
+            editingActions.append(btrEditingAction)
         }
         return EPUBNavigatorViewController.Configuration(
             preferences: EPUBThemePreferences.make(for: theme, scroll: layout == .scrolling),
@@ -122,7 +123,7 @@ final class NormalReadingNavigatorController: UIViewController {
         title: "Save Quote", action: #selector(NormalReadingNavigatorController.triggerSaveQuoteAction))
 
     @objc private func triggerBTRAction() {
-        guard let selection = navigator.currentSelection else { return }
+        guard isBTRActionAvailable(), let selection = navigator.currentSelection else { return }
         onBTRRequested?(selection)
     }
 
@@ -141,6 +142,17 @@ extension NormalReadingNavigatorController: EPUBNavigatorDelegate {
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
         guard point.y <= Self.topTapZoneHeight else { return }
         onTopTap?()
+    }
+
+    /// Hides "BTR" from the edit menu while the reader's AI settings don't
+    /// allow it. Readium consults this every time the menu is built.
+    func navigator(
+        _ navigator: SelectableNavigator, canPerformAction action: EditingAction, for selection: Selection
+    ) -> Bool {
+        if action == Self.btrEditingAction {
+            return isBTRActionAvailable()
+        }
+        return true
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {

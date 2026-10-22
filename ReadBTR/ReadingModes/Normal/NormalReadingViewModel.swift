@@ -86,10 +86,7 @@ final class NormalReadingViewModel {
                 publication: publication,
                 initialLocation: book.currentLocator,
                 theme: theme,
-                layout: settings.layout,
-                // The edit-menu entry is fixed once the navigator is built;
-                // `onBTRRequested` re-checks in case settings change later.
-                includesBTRAction: isBTRAvailable
+                layout: settings.layout
             )
             wireNavigatorCallbacks(host)
             navigatorHost = host
@@ -115,6 +112,9 @@ final class NormalReadingViewModel {
         }
         host.onTopTap = { [weak self] in
             self?.isShowingToolbar = true
+        }
+        host.isBTRActionAvailable = { [weak self] in
+            self?.isBTRAvailable ?? false
         }
         host.onBTRRequested = { [weak self] selection in
             guard let self, self.isBTRAvailable else { return }
