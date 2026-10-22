@@ -3,15 +3,17 @@ default_platform(:ios)
 platform :ios do
   desc "Run unit and UI tests on the simulator"
   lane :test do
+    regenerate_project
     run_tests(
       project: "ReadBTR.xcodeproj",
       scheme: "ReadBTR",
-      devices: ["iPhone 16"]
+      device: ENV.fetch("READBTR_TEST_DEVICE", "iPhone Duo")
     )
   end
 
   desc "Build the app for the simulator (debug, no signing)"
   lane :build do
+    regenerate_project
     gym(
       project: "ReadBTR.xcodeproj",
       scheme: "ReadBTR",
@@ -19,5 +21,10 @@ platform :ios do
       skip_archive: true,
       destination: "generic/platform=iOS Simulator"
     )
+  end
+
+  desc "Regenerate ReadBTR.xcodeproj from project.yml"
+  private_lane :regenerate_project do
+    Dir.chdir("..") { sh("xcodegen", "generate", "--quiet") }
   end
 end
