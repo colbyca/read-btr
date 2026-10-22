@@ -16,11 +16,11 @@ extension URLSession: URLRequestPerforming {}
 struct GeminiProvider: AIProvider {
     let apiKey: String
 
-    /// `2.5-flash` — fast/cheap, more than sufficient for the fixed,
+    /// `3.8-flash` — fast/cheap, more than sufficient for the fixed,
     /// well-scoped extraction/summarization prompts this app sends
     /// (design-roadmap.md §6.6). Trivially bumped later; nothing else in
     /// the app knows this string.
-    var model: String = "gemini-2.5-flash"
+    var model: String = "gemini-3.8-flash"
 
     var session: URLRequestPerforming = URLSession.shared
 

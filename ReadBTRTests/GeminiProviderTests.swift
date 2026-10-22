@@ -67,12 +67,12 @@ struct GeminiProviderTests {
         let session = FakeSession()
         session.responseData = Self.candidateResponse(text: "ok")
         var provider = GeminiProvider(apiKey: "abc123", session: session)
-        provider.model = "gemini-2.5-flash"
+        provider.model = "gemini-3.8-flash"
 
         _ = try await provider.generateText(prompt: "hi", responseSchema: nil)
 
         let url = try #require(session.lastRequest?.url?.absoluteString)
-        #expect(url.contains("gemini-2.5-flash:generateContent"))
+        #expect(url.contains("gemini-3.8-flash:generateContent"))
         #expect(url.contains("key=abc123"))
     }
 
