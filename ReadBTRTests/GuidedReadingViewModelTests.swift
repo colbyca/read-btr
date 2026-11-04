@@ -234,9 +234,16 @@ struct GuidedReadingViewModelTests {
         #expect(viewModel.isPlaying == false)
     }
 
+    /// Deliberately skips `makeLoadedViewModel()`: toolbar state needs no
+    /// navigator, and standing up another key `UIWindow` + WebView in
+    /// parallel with the other tests here breaks the highlight test's page.
     @Test func toggleToolbarShowsThenHides() async throws {
-        let (viewModel, _, cleanup) = try await Self.makeLoadedViewModel()
+        let (storage, cleanup) = try RSVPViewModelTests.makeTempStorage()
         defer { cleanup() }
+        let context = try RSVPViewModelTests.makeContext()
+        let importer = BookImporter(fileStorage: storage, publicationLoader: PublicationLoader())
+        let book = try await importer.importBook(from: RSVPViewModelTests.fixtureURL, into: context)
+        let viewModel = GuidedReadingViewModel(book: book, modelContext: context, fileStorage: storage)
 
         viewModel.toggleToolbar()
         #expect(viewModel.isShowingToolbar == true)
