@@ -109,9 +109,9 @@ private struct GuidedReadingScreen: View {
             .fullScreenCover(isPresented: $viewModel.isShowingSurroundingView) {
                 NormalReadingView(book: viewModel.book, forcedLayout: .scrolling)
             }
-            .fullScreenCover(isPresented: $viewModel.isShowingBTRMenu) {
-                if let btrViewModel = viewModel.makeBTRMenuViewModel() {
-                    BTRMenuView(viewModel: btrViewModel)
+            .fullScreenCover(isPresented: $viewModel.isShowingBTRChat) {
+                if let btrViewModel = viewModel.makeBTRChatViewModel() {
+                    BTRChatView(viewModel: btrViewModel)
                 }
             }
         }
@@ -161,7 +161,7 @@ private struct GuidedReadingContentView: View {
                     onDefine: { viewModel.isShowingDictionary = true },
                     onViewSurrounding: { viewModel.isShowingSurroundingView = true },
                     onSaveQuote: viewModel.selectionSpansMultipleWords ? { viewModel.saveQuote() } : nil,
-                    onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRMenu = true } : nil
+                    onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRChat = true } : nil
                 )
                 .position(x: frame.midX, y: max(frame.minY - 40, 40))
                 .transition(.opacity)

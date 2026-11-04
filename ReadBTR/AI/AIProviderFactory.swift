@@ -9,6 +9,9 @@ import Foundation
 /// provider is one new `case` here, nothing else.
 enum AIProviderFactory {
     static func makeProvider(settings: AppSettings, keyStore: AIKeyStore) -> AIProvider? {
+        #if DEBUG
+            if UITestHooks.isStubbingAI { return UITestHooks.StubAIProvider() }
+        #endif
         guard let providerKind = settings.aiProvider, let key = keyStore.key(for: providerKind), !key.isEmpty else {
             return nil
         }

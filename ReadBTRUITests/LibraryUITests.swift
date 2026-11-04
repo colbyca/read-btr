@@ -45,4 +45,54 @@ final class LibraryUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertEqual(bookTiles.count, countBefore - 1)
     }
+
+    func testCreatesACollectionAndOpensIt() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let bookTiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'book-'"))
+        XCTAssertTrue(bookTiles.firstMatch.waitForExistence(timeout: 10))
+
+        app.buttons["home-add"].tap()
+        let addCollection = app.buttons["add-collection"].firstMatch
+        XCTAssertTrue(addCollection.waitForExistence(timeout: 5))
+        addCollection.tap()
+
+        let name = "Test Series \(Int.random(in: 1000...9999))"
+        let nameField = app.textFields["new-collection-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText(name)
+
+        app.buttons["new-collection-add-books"].tap()
+        let firstPick = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'pick-book-'")).firstMatch
+        XCTAssertTrue(firstPick.waitForExistence(timeout: 5))
+        firstPick.tap()
+        app.buttons["pick-books-confirm"].tap()
+
+        let create = app.buttons["new-collection-create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        create.tap()
+
+        let tile = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.tap()
+
+        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["collection-book-0"].waitForExistence(timeout: 5))
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "collection-detail"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        // Clean up so repeated runs don't pile up collections.
+        app.buttons["collection-more"].tap()
+        let delete = app.buttons["collection-delete"].firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+        let confirm = app.buttons["confirm-delete-collection"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+    }
 }

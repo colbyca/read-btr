@@ -20,7 +20,7 @@ struct BTRSelectionTooltip: View {
     var onViewSurrounding: (() -> Void)?
     var onSaveQuote: (() -> Void)?
     /// `nil` hides the BTR action — the reader's AI settings don't allow
-    /// the BTR menu for this book.
+    /// the BTR chat for this book.
     var onBTR: (() -> Void)?
 
     var body: some View {

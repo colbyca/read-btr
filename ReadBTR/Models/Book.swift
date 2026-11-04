@@ -39,17 +39,13 @@ final class Book {
     /// feature flags (design-roadmap.md §2.5).
     var settingsOverride: BookSettingsOverride?
 
-    @Relationship(deleteRule: .cascade, inverse: \ChapterSummary.book)
-    var chapterSummaries: [ChapterSummary] = []
-
-    @Relationship(deleteRule: .cascade, inverse: \EntityProfile.book)
-    var entityProfiles: [EntityProfile] = []
-
     @Relationship(deleteRule: .cascade, inverse: \SavedQuote.book)
     var savedQuotes: [SavedQuote] = []
 
-    @Relationship(deleteRule: .cascade, inverse: \ComprehensionCheck.book)
-    var comprehensionChecks: [ComprehensionCheck] = []
+    /// This book's places in collections (design-roadmap.md §2.12).
+    /// Deleting the book removes it from every collection.
+    @Relationship(deleteRule: .cascade, inverse: \CollectionEntry.book)
+    var collectionEntries: [CollectionEntry] = []
 
     init(
         id: UUID = UUID(),
@@ -93,7 +89,7 @@ extension Book {
 
     func isAIFeatureEnabled(_ key: AIFeatureKey, _ global: AppSettings) -> Bool {
         guard global.aiProviderIsUsable, global.aiFeaturesMasterToggle else { return false }
-        if let override = settingsOverride?.aiFeatureFlagOverrides.first(where: { $0.key == key }) {
+        if let override = settingsOverride?.aiFeatureFlagOverrides.flag(for: key) {
             return override.isEnabled
         }
         return global.aiFeatureFlag(for: key)?.isEnabled ?? false

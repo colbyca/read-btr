@@ -93,9 +93,9 @@ private struct RSVPReadingScreen: View {
                     .fullScreenCover(isPresented: $viewModel.isShowingSurroundingView) {
                         NormalReadingView(book: viewModel.book, forcedLayout: .scrolling)
                     }
-                    .fullScreenCover(isPresented: $viewModel.isShowingBTRMenu) {
-                        if let btrViewModel = viewModel.makeBTRMenuViewModel() {
-                            BTRMenuView(viewModel: btrViewModel)
+                    .fullScreenCover(isPresented: $viewModel.isShowingBTRChat) {
+                        if let btrViewModel = viewModel.makeBTRChatViewModel() {
+                            BTRChatView(viewModel: btrViewModel)
                         }
                     }
             }
@@ -144,7 +144,7 @@ private struct RSVPContentView: View {
                                 onDefine: { viewModel.isShowingDictionary = true },
                                 onViewSurrounding: { viewModel.isShowingSurroundingView = true },
                                 onSaveQuote: { viewModel.saveQuote() },
-                                onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRMenu = true } : nil
+                                onBTR: viewModel.isBTRAvailable ? { viewModel.isShowingBTRChat = true } : nil
                             )
                             .offset(y: 64)
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))

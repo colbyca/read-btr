@@ -41,11 +41,11 @@ final class NormalReadingNavigatorController: UIViewController {
     static let topTapZoneHeight: CGFloat = 140
 
     /// `includesCustomActions` controls the "Save Quote" and "BTR" entries
-    /// appended to the native selection edit menu. `false` only for the read-only preview pane `BTRMenuViewModel.preparePreview()`
-    /// embeds inside the BTR menu itself — without this, selecting text
-    /// there could open a second BTR menu on top of the first.
+    /// appended to the native selection edit menu. Pass `false` for an
+    /// embedded, read-only preview, where selecting text and tapping BTR
+    /// would open a second BTR chat on top of the first.
     /// `includesBTRAction` drops just the "BTR" entry, for when the
-    /// reader's AI settings don't allow the BTR menu for this book.
+    /// reader's AI settings don't allow the BTR chat for this book.
     init(
         publication: Publication, initialLocation: Locator?, theme: ReaderTheme, layout: NormalModeLayout,
         includesCustomActions: Bool = true, includesBTRAction: Bool = true

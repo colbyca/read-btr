@@ -106,4 +106,40 @@ struct GeminiProviderTests {
             _ = try await provider.generateText(prompt: "hi", responseSchema: nil)
         }
     }
+
+    @Test func chatReplySendsSystemInstructionAndAlternatingRoles() async throws {
+        let session = FakeSession()
+        session.responseData = Self.candidateResponse(text: "**Alice** is curious.")
+        let provider = GeminiProvider(apiKey: "test-key", session: session)
+
+        let reply = try await provider.generateChatReply(
+            systemPrompt: "Use markdown.",
+            messages: [
+                AIChatMessage(role: .user, text: "Who is Alice?"),
+                AIChatMessage(role: .assistant, text: "The heroine."),
+                AIChatMessage(role: .user, text: "Tell me more."),
+            ])
+
+        #expect(reply == "**Alice** is curious.")
+        let body = try #require(session.lastRequest?.httpBody)
+        let decoded = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let system = try #require(decoded["systemInstruction"] as? [String: Any])
+        let systemParts = try #require(system["parts"] as? [[String: Any]])
+        #expect(systemParts.first?["text"] as? String == "Use markdown.")
+
+        let contents = try #require(decoded["contents"] as? [[String: Any]])
+        #expect(contents.map { $0["role"] as? String } == ["user", "model", "user"])
+    }
+
+    @Test func multiPartResponsesAreJoined() async throws {
+        let session = FakeSession()
+        let json: [String: Any] = [
+            "candidates": [["content": ["parts": [["text": "Hello, "], ["text": "world"]]]]]
+        ]
+        session.responseData = try JSONSerialization.data(withJSONObject: json)
+        let provider = GeminiProvider(apiKey: "test-key", session: session)
+
+        let result = try await provider.generateText(prompt: "hi", responseSchema: .plainText)
+        #expect(result == "Hello, world")
+    }
 }

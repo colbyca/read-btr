@@ -17,7 +17,7 @@ struct GeminiProvider: AIProvider {
     let apiKey: String
 
     /// `3.8-flash` — fast/cheap, more than sufficient for the fixed,
-    /// well-scoped extraction/summarization prompts this app sends
+    /// well-scoped prompts this app sends
     /// (design-roadmap.md §6.6). Trivially bumped later; nothing else in
     /// the app knows this string.
     var model: String = "gemini-3.8-flash"
@@ -27,11 +27,9 @@ struct GeminiProvider: AIProvider {
     private static let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
 
     func generateText(prompt: String, responseSchema: AIResponseSchema?) async throws -> String {
-        guard !apiKey.isEmpty else { throw AIProviderError.missingAPIKey }
-
         var body: [String: Any] = [
             "contents": [
-                ["parts": [["text": prompt]]]
+                ["role": "user", "parts": [["text": prompt]]]
             ]
         ]
         if case .json(let schema) = responseSchema {
@@ -40,6 +38,24 @@ struct GeminiProvider: AIProvider {
                 "responseSchema": schema,
             ]
         }
+        return try await send(body)
+    }
+
+    /// Uses Gemini's native `systemInstruction` and `user`/`model` turns,
+    /// so the standing instructions aren't diluted as the chat grows.
+    func generateChatReply(systemPrompt: String, messages: [AIChatMessage]) async throws -> String {
+        let contents: [[String: Any]] = messages.map { message in
+            ["role": message.role == .user ? "user" : "model", "parts": [["text": message.text]]]
+        }
+        let body: [String: Any] = [
+            "systemInstruction": ["parts": [["text": systemPrompt]]],
+            "contents": contents,
+        ]
+        return try await send(body)
+    }
+
+    private func send(_ body: [String: Any]) async throws -> String {
+        guard !apiKey.isEmpty else { throw AIProviderError.missingAPIKey }
 
         guard
             let url = URL(string: "\(Self.baseURL)/\(model):generateContent?key=\(apiKey)"),
@@ -81,7 +97,7 @@ struct GeminiProvider: AIProvider {
             let first = candidates.first,
             let content = first["content"] as? [String: Any],
             let parts = content["parts"] as? [[String: Any]],
-            let text = parts.first?["text"] as? String,
+            case let text = parts.compactMap({ $0["text"] as? String }).joined(),
             !text.isEmpty
         else {
             return nil

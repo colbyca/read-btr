@@ -42,7 +42,21 @@ extension AppSettings {
     }
 
     func aiFeatureFlag(for key: AIFeatureKey) -> AIFeatureFlag? {
-        aiFeatureFlags.first { $0.key == key }
+        aiFeatureFlags.flag(for: key)
+    }
+
+    /// Rewrites flags saved by older builds (duplicate or retired keys, see
+    /// `AIFeatureKey.LegacyRawValue`) into exactly one flag per current
+    /// key. Returns whether anything changed.
+    @discardableResult
+    func normalizeAIFeatureFlags() -> Bool {
+        var cleaned = aiFeatureFlags.normalized
+        for key in AIFeatureKey.allCases where !cleaned.contains(where: { $0.key == key }) {
+            cleaned.append(AIFeatureFlag(key: key, isEnabled: false))
+        }
+        guard cleaned != aiFeatureFlags else { return false }
+        aiFeatureFlags = cleaned
+        return true
     }
 
     /// Swappable for tests; defaults to the real Keychain-backed store.

@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Removes a book from the library: its SwiftData record (which cascades to
-/// its chapter summaries, entity profiles, and saved quotes, per `Book`'s
+/// its saved quotes and its places in collections, per `Book`'s
 /// relationship delete rules) plus the EPUB and cover files it owns under
 /// `<Application Support>/Books/`. The mirror image of `BookImporter`.
 struct BookDeleter {

@@ -5,7 +5,7 @@ final class ReadBTRUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Add Book"].exists)
+        XCTAssertTrue(app.buttons["home-add"].exists)
     }
 
     func testAddBookOpensFileImporter() {
@@ -17,7 +17,11 @@ final class ReadBTRUITests: XCTestCase {
         screenshotBefore.lifetime = .keepAlways
         add(screenshotBefore)
 
-        app.buttons["Add Book"].tap()
+        app.buttons["home-add"].tap()
+        // The Add tile first asks whether to add a book or a collection.
+        let addBook = app.buttons["add-book"].firstMatch
+        XCTAssertTrue(addBook.waitForExistence(timeout: 5))
+        addBook.tap()
 
         // The system document picker is a separate process/UI; assert on
         // its "Cancel" button rather than any ReadBTR-owned element to
