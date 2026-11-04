@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The pinned first cell in the library grid — sized to match
 /// `BookCoverView` so it sits naturally in the same grid, always first
-/// (design-roadmap.md §6.1).
-struct AddBookTile: View {
+/// (design-roadmap.md §6.1). Tapping it asks whether to add a book or a
+/// collection.
+struct AddTile: View {
     let action: () -> Void
 
     var body: some View {
@@ -11,10 +12,9 @@ struct AddBookTile: View {
             VStack(spacing: 8) {
                 Image(systemName: "plus")
                     .font(.system(size: 24, weight: .semibold))
-                Text("Add Book")
+                Text("Add")
                     .font(.caption2)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             }
             .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -26,6 +26,7 @@ struct AddBookTile: View {
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Add Book")
+        .accessibilityLabel("Add")
+        .accessibilityIdentifier("home-add")
     }
 }

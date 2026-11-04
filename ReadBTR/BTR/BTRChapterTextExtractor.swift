@@ -2,9 +2,9 @@ import Foundation
 @preconcurrency import ReadiumShared
 
 /// Extracts the text of one chapter (== Readium resource/spine item, design-
-/// roadmap.md §10) up to a given position in it, for the "summarize since
-/// start of chapter" BTR option (§6.6.4) and comprehension checks: range is
-/// `[start of current resource, current locator]`.
+/// roadmap.md §10) up to a given position in it: range is
+/// `[start of current resource, current locator]`. The building block the
+/// BTR chat's `BTRBookTextExtractor` walks a whole book with.
 enum BTRChapterTextExtractor {
     static func extractText(upTo locator: Locator, in publication: Publication) async -> String? {
         let pieces = await textPieces(
@@ -15,7 +15,7 @@ enum BTRChapterTextExtractor {
     /// Every text element of one resource, in order, stopping once an
     /// element's progression passes `cutoffProgression` (nil = the whole
     /// resource). Shared by the chapter extractor above and
-    /// `BTRReadSoFarTextExtractor`.
+    /// `BTRBookTextExtractor`.
     static func textPieces(
         ofResource href: String, upToProgression cutoffProgression: Double?, in publication: Publication
     ) async -> [String] {

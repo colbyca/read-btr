@@ -46,7 +46,16 @@ final class GuidedReadingViewModel {
     private(set) var currentSelection: Selection?
     var isShowingDictionary = false
     var isShowingSurroundingView = false
-    var isShowingBTRMenu = false
+    var isShowingBTRChat = false {
+        didSet {
+            if !isShowingBTRChat { activeBTRChat = nil }
+        }
+    }
+
+    /// The open chat, kept for as long as it's shown: the full-screen
+    /// cover's content closure can be re-evaluated while it's up, and must
+    /// get the same conversation back rather than a fresh one.
+    @ObservationIgnored private var activeBTRChat: BTRChatViewModel?
 
     /// Changes each time a quote is saved, so the view can flash a brief
     /// "Quote saved" confirmation.
@@ -351,20 +360,23 @@ final class GuidedReadingViewModel {
         dismissSelection()
     }
 
-    /// Builds a fresh `BTRMenuViewModel` anchored at the current selection,
+    /// Builds a fresh `BTRChatViewModel` anchored at the current selection,
     /// or `nil` if there's nothing selected (the BTR icon shouldn't be
     /// reachable without one in practice, but this stays defensive).
-    func makeBTRMenuViewModel() -> BTRMenuViewModel? {
+    func makeBTRChatViewModel() -> BTRChatViewModel? {
+        if let activeBTRChat { return activeBTRChat }
         guard let publication, let locator = currentSelection?.locator else { return nil }
-        return BTRMenuViewModel.make(
+        let chat = BTRChatViewModel.make(
             book: book, publication: publication, anchorLocator: locator, modelContext: modelContext)
+        activeBTRChat = chat
+        return chat
     }
 
-    /// Whether the reader's AI settings allow the BTR menu for this book —
+    /// Whether the reader's AI settings allow the BTR chat for this book —
     /// the BTR entry point is hidden when they don't. Read live, so a
     /// change made in the settings sheet mid-session takes effect at once.
     var isBTRAvailable: Bool {
-        BTRMenuViewModel.isAvailable(for: book, modelContext: modelContext)
+        BTRChatViewModel.isAvailable(for: book, modelContext: modelContext)
     }
 
     private func schedulePlayback() {

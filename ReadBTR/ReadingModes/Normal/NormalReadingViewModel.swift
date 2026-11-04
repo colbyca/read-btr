@@ -33,10 +33,19 @@ final class NormalReadingViewModel {
     var isShowingSettings = false
 
     /// The selection "BTR" was tapped for (design-roadmap.md §6.6.1) — set
-    /// right before `isShowingBTRMenu` flips, so the `.fullScreenCover`'s
-    /// content closure has something to anchor `BTRMenuView` to.
+    /// right before `isShowingBTRChat` flips, so the `.fullScreenCover`'s
+    /// content closure has something to anchor `BTRChatView` to.
     private(set) var btrSelection: Selection?
-    var isShowingBTRMenu = false
+    var isShowingBTRChat = false {
+        didSet {
+            if !isShowingBTRChat { activeBTRChat = nil }
+        }
+    }
+
+    /// The open chat, kept for as long as it's shown: the full-screen
+    /// cover's content closure can be re-evaluated while it's up, and must
+    /// get the same conversation back rather than a fresh one.
+    @ObservationIgnored private var activeBTRChat: BTRChatViewModel?
 
     /// Changes each time a quote is saved, so the view can flash a brief
     /// "Quote saved" confirmation.
@@ -116,7 +125,7 @@ final class NormalReadingViewModel {
         host.onBTRRequested = { [weak self] selection in
             guard let self, self.isBTRAvailable else { return }
             self.btrSelection = selection
-            self.isShowingBTRMenu = true
+            self.isShowingBTRChat = true
         }
         host.onSaveQuoteRequested = { [weak self] selection in
             self?.saveQuote(from: selection)
@@ -144,21 +153,24 @@ final class NormalReadingViewModel {
         }
     }
 
-    /// Builds a fresh `BTRMenuViewModel` anchored at whatever selection
+    /// Builds a fresh `BTRChatViewModel` anchored at whatever selection
     /// "BTR" was last tapped for, or `nil` if there's nothing to anchor to
     /// (the menu item isn't reachable without a selection in practice, but
     /// this stays defensive rather than assuming that ordering).
-    func makeBTRMenuViewModel() -> BTRMenuViewModel? {
+    func makeBTRChatViewModel() -> BTRChatViewModel? {
+        if let activeBTRChat { return activeBTRChat }
         guard let publication, let locator = btrSelection?.locator else { return nil }
-        return BTRMenuViewModel.make(
+        let chat = BTRChatViewModel.make(
             book: book, publication: publication, anchorLocator: locator, modelContext: modelContext)
+        activeBTRChat = chat
+        return chat
     }
 
-    /// Whether the reader's AI settings allow the BTR menu for this book —
+    /// Whether the reader's AI settings allow the BTR chat for this book —
     /// the BTR entry point is hidden when they don't. Read live, so a
     /// change made in the settings sheet mid-session takes effect at once.
     var isBTRAvailable: Bool {
-        BTRMenuViewModel.isAvailable(for: book, modelContext: modelContext)
+        BTRChatViewModel.isAvailable(for: book, modelContext: modelContext)
     }
 
     /// Re-reads this book's *current* effective theme/settings and pushes

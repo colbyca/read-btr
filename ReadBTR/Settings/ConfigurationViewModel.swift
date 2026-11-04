@@ -125,7 +125,7 @@ final class ConfigurationViewModel {
     }
 
     func isAIFeatureOverridden(_ key: AIFeatureKey) -> Bool {
-        book?.settingsOverride?.aiFeatureFlagOverrides.contains { $0.key == key } ?? false
+        book?.settingsOverride?.aiFeatureFlagOverrides.flag(for: key) != nil
     }
 
     func setAIFeatureEnabled(_ key: AIFeatureKey, _ isEnabled: Bool) {
@@ -135,11 +135,13 @@ final class ConfigurationViewModel {
             override.aiFeatureFlagOverrides.append(AIFeatureFlag(key: key, isEnabled: isEnabled))
             book.settingsOverride = override
         } else {
-            if let index = appSettings.aiFeatureFlags.firstIndex(where: { $0.key == key }) {
-                appSettings.aiFeatureFlags[index].isEnabled = isEnabled
+            var flags = appSettings.aiFeatureFlags.normalized
+            if let index = flags.firstIndex(where: { $0.key == key }) {
+                flags[index].isEnabled = isEnabled
             } else {
-                appSettings.aiFeatureFlags.append(AIFeatureFlag(key: key, isEnabled: isEnabled))
+                flags.append(AIFeatureFlag(key: key, isEnabled: isEnabled))
             }
+            appSettings.aiFeatureFlags = flags
         }
         save()
     }

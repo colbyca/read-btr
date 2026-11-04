@@ -2,11 +2,13 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The library screen — a 3-wide grid of books with a pinned "add" tile,
-/// search, and a settings entry point (design-roadmap.md §6.1).
+/// The library screen — a 3-wide grid with a pinned "Add" tile, then the
+/// reader's collections, then every book; search, and a settings entry
+/// point (design-roadmap.md §6.1).
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var books: [Book]
+    @Query(sort: \BookCollection.createdAt) private var collections: [BookCollection]
 
     @State private var searchText = ""
     @State private var isShowingFileImporter = false
@@ -18,6 +20,8 @@ struct HomeView: View {
     @State private var isShowingSavedQuotes = false
     @State private var bookPendingDeletion: Book?
     @State private var isShowingDeleteError = false
+    @State private var isShowingAddChoice = false
+    @State private var newCollectionRequest: NewCollectionRequest?
 
     #if DEBUG
         @State private var isShowingNavigatorSpike = false
@@ -40,11 +44,28 @@ struct HomeView: View {
         }
     }
 
+    /// Collections whose name, or any of whose books, match the search.
+    private var filteredCollections: [BookCollection] {
+        guard !searchText.isEmpty else { return collections }
+        return collections.filter { collection in
+            collection.name.localizedCaseInsensitiveContains(searchText)
+                || collection.orderedBooks.contains { $0.title.localizedCaseInsensitiveContains(searchText) }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    AddBookTile { isShowingFileImporter = true }
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                    AddTile { isShowingAddChoice = true }
+
+                    ForEach(filteredCollections) { collection in
+                        NavigationLink(value: collection) {
+                            CollectionTileView(collection: collection)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("collection-\(collection.id)")
+                    }
 
                     ForEach(filteredBooks) { book in
                         Button {
@@ -55,6 +76,7 @@ struct HomeView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("book-\(book.id)")
                         .contextMenu {
+                            addToCollectionMenu(for: book)
                             Button("Delete Book", systemImage: "trash", role: .destructive) {
                                 bookPendingDeletion = book
                             }
@@ -65,7 +87,23 @@ struct HomeView: View {
                 .padding()
             }
             .navigationTitle("Library")
+            .navigationDestination(for: BookCollection.self) { collection in
+                CollectionDetailView(collection: collection) { book in
+                    bookPendingModeSelection = book
+                }
+            }
             .searchable(text: $searchText, prompt: "Search your books")
+            .confirmationDialog("Add to Your Library", isPresented: $isShowingAddChoice, titleVisibility: .visible) {
+                Button("Add Book") { isShowingFileImporter = true }
+                    .accessibilityIdentifier("add-book")
+                Button("New Collection") { newCollectionRequest = NewCollectionRequest(initialBooks: []) }
+                    .accessibilityIdentifier("add-collection")
+            } message: {
+                Text("Import a book, or start a collection, like a series, to read in order.")
+            }
+            .sheet(item: $newCollectionRequest) { request in
+                NewCollectionSheet(initialBooks: request.initialBooks)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -151,6 +189,7 @@ struct HomeView: View {
             }
             #if DEBUG
                 .task {
+                    UITestHooks.configureSettingsIfNeeded(context: modelContext)
                     await DevSeeder.seedIfLibraryEmpty(context: modelContext)
                 }
             #endif
@@ -223,10 +262,45 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
+    private func addToCollectionMenu(for book: Book) -> some View {
+        Menu {
+            ForEach(collections) { collection in
+                let isMember = collection.contains(book)
+                Button {
+                    if isMember {
+                        collection.remove(book, in: modelContext)
+                    } else {
+                        collection.append(book, in: modelContext)
+                    }
+                    try? modelContext.save()
+                } label: {
+                    if isMember {
+                        Label(collection.name, systemImage: "checkmark")
+                    } else {
+                        Text(collection.name)
+                    }
+                }
+            }
+            Divider()
+            Button("New Collection…", systemImage: "plus") {
+                newCollectionRequest = NewCollectionRequest(initialBooks: [book])
+            }
+        } label: {
+            Label("Add to Collection", systemImage: "books.vertical")
+        }
+        .accessibilityIdentifier("add-to-collection")
+    }
+
     private func presentImportError(_ message: String) {
         importErrorMessage = message
         isShowingImportError = true
     }
+}
+
+private struct NewCollectionRequest: Identifiable {
+    let id = UUID()
+    let initialBooks: [Book]
 }
 
 private struct ReadingSession: Identifiable {

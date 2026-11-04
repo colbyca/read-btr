@@ -20,7 +20,7 @@ struct BTRSelectionTooltip: View {
     var onViewSurrounding: (() -> Void)?
     var onSaveQuote: (() -> Void)?
     /// `nil` hides the BTR action — the reader's AI settings don't allow
-    /// the BTR menu for this book.
+    /// the BTR chat for this book.
     var onBTR: (() -> Void)?
 
     var body: some View {
@@ -44,6 +44,9 @@ struct BTRSelectionTooltip: View {
         .padding(.vertical, 10)
         .background(.regularMaterial, in: Capsule())
         .shadow(radius: 4)
+        // A container, so each button keeps its own `btr-tooltip-*`
+        // identifier instead of inheriting this one.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("btr-selection-tooltip")
     }
 

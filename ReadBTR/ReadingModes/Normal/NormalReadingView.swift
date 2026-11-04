@@ -98,9 +98,9 @@ private struct NormalReadingScreen: View {
                         .sheet(isPresented: $viewModel.isShowingSettings, onDismiss: { viewModel.refreshSettings() }) {
                             ConfigurationView(book: viewModel.book)
                         }
-                        .fullScreenCover(isPresented: $viewModel.isShowingBTRMenu) {
-                            if let btrViewModel = viewModel.makeBTRMenuViewModel() {
-                                BTRMenuView(viewModel: btrViewModel)
+                        .fullScreenCover(isPresented: $viewModel.isShowingBTRChat) {
+                            if let btrViewModel = viewModel.makeBTRChatViewModel() {
+                                BTRChatView(viewModel: btrViewModel)
                             }
                         }
                         .quoteSavedToast(trigger: viewModel.quoteSavedConfirmationID)

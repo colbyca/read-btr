@@ -13,6 +13,8 @@ struct BookSettingsOverride: Codable, Equatable {
     var readerSettings: ReaderSettings?
 
     /// Sparse: only entries the user has explicitly overridden for this
-    /// book appear here. A missing key inherits the global flag.
+    /// book appear here. A missing key inherits the global flag. Read
+    /// through `aiFeatureFlagOverrides.flag(for:)`, which tolerates the
+    /// duplicate/retired entries older builds could leave behind.
     var aiFeatureFlagOverrides: [AIFeatureFlag] = []
 }

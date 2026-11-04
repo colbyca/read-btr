@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct ConfigurationViewModelTests {
     static func makeContext() throws -> ModelContext {
-        let schema = Schema([Book.self, AppSettings.self, ChapterSummary.self, EntityProfile.self, SavedQuote.self, ComprehensionCheck.self])
+        let schema = Schema(AppSchema.models)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         return ModelContext(container)
@@ -137,22 +137,22 @@ struct ConfigurationViewModelTests {
         let viewModel = ConfigurationViewModel(book: book, modelContext: context)
         viewModel.appSettings.aiFeaturesMasterToggle = true
         viewModel.appSettings.aiProvider = .gemini
-        viewModel.appSettings.aiFeatureFlags = [
-            AIFeatureFlag(key: .chapterSummary, isEnabled: true),
-            AIFeatureFlag(key: .entityExtraction, isEnabled: false)
-        ]
+        viewModel.appSettings.aiFeatureFlags = [AIFeatureFlag(key: .btrChat, isEnabled: true)]
 
-        viewModel.setAIFeatureEnabled(.entityExtraction, true)
+        // Untouched: reads straight from the global flag.
+        #expect(viewModel.isAIFeatureOverridden(.btrChat) == false)
+        #expect(viewModel.isAIFeatureEnabled(.btrChat) == true)
 
-        #expect(viewModel.isAIFeatureOverridden(.entityExtraction) == true)
-        #expect(viewModel.isAIFeatureEnabled(.entityExtraction) == true)
-        // Only the touched key was overridden — chapterSummary still reads
-        // straight from the global flag, no override recorded for it.
-        #expect(viewModel.isAIFeatureOverridden(.chapterSummary) == false)
-        #expect(viewModel.isAIFeatureEnabled(.chapterSummary) == true)
+        viewModel.setAIFeatureEnabled(.btrChat, false)
+
+        #expect(viewModel.isAIFeatureOverridden(.btrChat) == true)
+        #expect(viewModel.isAIFeatureEnabled(.btrChat) == false)
+        #expect(book.settingsOverride?.aiFeatureFlagOverrides.count == 1)
+        // The global flag itself is untouched.
+        #expect(viewModel.appSettings.aiFeatureFlag(for: .btrChat)?.isEnabled == true)
     }
 
-    @Test func perBookAIFeatureResetRemovesOnlyThatKeysOverride() throws {
+    @Test func perBookAIFeatureResetRemovesTheOverride() throws {
         let previous = AppSettings.keyStore
         defer { AppSettings.keyStore = previous }
         AppSettings.keyStore = ModelsTests.FakeAIKeyStore(keys: [.gemini: "test-key"])
@@ -163,21 +163,21 @@ struct ConfigurationViewModelTests {
         viewModel.appSettings.aiFeaturesMasterToggle = true
         viewModel.appSettings.aiProvider = .gemini
 
-        viewModel.setAIFeatureEnabled(.entityExtraction, true)
-        viewModel.setAIFeatureEnabled(.comprehensionCheck, true)
-        viewModel.resetAIFeatureOverride(.entityExtraction)
+        viewModel.setAIFeatureEnabled(.btrChat, true)
+        #expect(viewModel.isAIFeatureOverridden(.btrChat) == true)
+        viewModel.resetAIFeatureOverride(.btrChat)
 
-        #expect(viewModel.isAIFeatureOverridden(.entityExtraction) == false)
-        #expect(viewModel.isAIFeatureOverridden(.comprehensionCheck) == true)
+        #expect(viewModel.isAIFeatureOverridden(.btrChat) == false)
     }
 
     @Test func globalAIFeatureToggleWritesAppSettingsFlagsArray() throws {
         let context = try Self.makeContext()
         let viewModel = ConfigurationViewModel(book: nil, modelContext: context)
 
-        viewModel.setAIFeatureEnabled(.chapterSummary, true)
+        viewModel.setAIFeatureEnabled(.btrChat, true)
 
-        #expect(viewModel.appSettings.aiFeatureFlag(for: .chapterSummary)?.isEnabled == true)
+        #expect(viewModel.appSettings.aiFeatureFlag(for: .btrChat)?.isEnabled == true)
+        #expect(viewModel.appSettings.aiFeatureFlags.count == AIFeatureKey.allCases.count)
     }
 
     // MARK: - API key storage

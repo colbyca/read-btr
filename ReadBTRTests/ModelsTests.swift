@@ -9,7 +9,7 @@ struct ModelsTests {
     /// Fresh in-memory SwiftData container per test — no state leaks
     /// between tests, no real disk I/O.
     static func makeContext() throws -> ModelContext {
-        let schema = Schema([Book.self, AppSettings.self, ChapterSummary.self, EntityProfile.self, SavedQuote.self, ComprehensionCheck.self])
+        let schema = Schema(AppSchema.models)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         return ModelContext(container)
@@ -48,53 +48,29 @@ struct ModelsTests {
         let book = Book(title: "Test Book", relativeFilePath: "Books/test.epub", position: Self.makePosition())
         context.insert(book)
 
-        let summary = ChapterSummary(
-            chapterHref: "chapter1.xhtml",
-            content: "Things happened.",
-            sourceEndLocatorJSON: Self.makePosition().locatorJSON,
-            book: book
-        )
-        let entity = EntityProfile(
-            displayName: "White Rabbit",
-            kind: .character,
-            summary: "A hurried rabbit.",
-            firstMentionLocatorJSON: Self.makePosition().locatorJSON,
-            book: book
-        )
         let quote = SavedQuote(
             text: "Down the rabbit-hole.",
             startLocatorJSON: Self.makePosition().locatorJSON,
             endLocatorJSON: Self.makePosition().locatorJSON,
             book: book
         )
-        context.insert(summary)
-        context.insert(entity)
         context.insert(quote)
+        let collection = BookCollection(name: "Series")
+        context.insert(collection)
+        collection.append(book, in: context)
         try context.save()
 
-        #expect(try context.fetch(FetchDescriptor<ChapterSummary>()).count == 1)
-        #expect(try context.fetch(FetchDescriptor<EntityProfile>()).count == 1)
         #expect(try context.fetch(FetchDescriptor<SavedQuote>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<CollectionEntry>()).count == 1)
 
         context.delete(book)
         try context.save()
 
-        #expect(try context.fetch(FetchDescriptor<ChapterSummary>()).isEmpty)
-        #expect(try context.fetch(FetchDescriptor<EntityProfile>()).isEmpty)
         #expect(try context.fetch(FetchDescriptor<SavedQuote>()).isEmpty)
-    }
-
-    // MARK: - EntityProfile dedup key
-
-    @Test func entityProfileCanonicalizesDisplayNameForDedup() {
-        let entity = EntityProfile(
-            displayName: "  The White Rabbit  ",
-            kind: .character,
-            summary: "...",
-            firstMentionLocatorJSON: "{}"
-        )
-        #expect(entity.canonicalName == "the white rabbit")
-        #expect(entity.displayName == "  The White Rabbit  ")
+        #expect(try context.fetch(FetchDescriptor<CollectionEntry>()).isEmpty)
+        // The collection itself stays, just without the book.
+        #expect(try context.fetch(FetchDescriptor<BookCollection>()).count == 1)
+        #expect(collection.orderedBooks.isEmpty)
     }
 
     // MARK: - AppSettingsStore singleton
@@ -165,12 +141,12 @@ struct ModelsTests {
 
         let global = AppSettings(
             aiFeaturesMasterToggle: true,
-            aiFeatureFlags: [AIFeatureFlag(key: .chapterSummary, isEnabled: true)],
+            aiFeatureFlags: [AIFeatureFlag(key: .btrChat, isEnabled: true)],
             aiProvider: .gemini
         )
         let book = Book(title: "T", relativeFilePath: "Books/t.epub", position: Self.makePosition())
 
-        #expect(book.isAIFeatureEnabled(.chapterSummary, global) == false)
+        #expect(book.isAIFeatureEnabled(.btrChat, global) == false)
     }
 
     @Test func aiFeatureDisabledWhenMasterToggleOff() {
@@ -180,12 +156,12 @@ struct ModelsTests {
 
         let global = AppSettings(
             aiFeaturesMasterToggle: false,
-            aiFeatureFlags: [AIFeatureFlag(key: .chapterSummary, isEnabled: true)],
+            aiFeatureFlags: [AIFeatureFlag(key: .btrChat, isEnabled: true)],
             aiProvider: .gemini
         )
         let book = Book(title: "T", relativeFilePath: "Books/t.epub", position: Self.makePosition())
 
-        #expect(book.isAIFeatureEnabled(.chapterSummary, global) == false)
+        #expect(book.isAIFeatureEnabled(.btrChat, global) == false)
     }
 
     @Test func aiFeatureEnabledWhenProviderKeyedAndFlagOn() {
@@ -195,12 +171,12 @@ struct ModelsTests {
 
         let global = AppSettings(
             aiFeaturesMasterToggle: true,
-            aiFeatureFlags: [AIFeatureFlag(key: .chapterSummary, isEnabled: true)],
+            aiFeatureFlags: [AIFeatureFlag(key: .btrChat, isEnabled: true)],
             aiProvider: .gemini
         )
         let book = Book(title: "T", relativeFilePath: "Books/t.epub", position: Self.makePosition())
 
-        #expect(book.isAIFeatureEnabled(.chapterSummary, global) == true)
+        #expect(book.isAIFeatureEnabled(.btrChat, global) == true)
     }
 
     @Test func perBookAIFeatureOverrideWinsOverGlobalFlag() {
@@ -210,7 +186,7 @@ struct ModelsTests {
 
         let global = AppSettings(
             aiFeaturesMasterToggle: true,
-            aiFeatureFlags: [AIFeatureFlag(key: .chapterSummary, isEnabled: true)],
+            aiFeatureFlags: [AIFeatureFlag(key: .btrChat, isEnabled: true)],
             aiProvider: .gemini
         )
         let book = Book(
@@ -218,11 +194,11 @@ struct ModelsTests {
             relativeFilePath: "Books/t.epub",
             position: Self.makePosition(),
             settingsOverride: BookSettingsOverride(
-                aiFeatureFlagOverrides: [AIFeatureFlag(key: .chapterSummary, isEnabled: false)]
+                aiFeatureFlagOverrides: [AIFeatureFlag(key: .btrChat, isEnabled: false)]
             )
         )
 
-        #expect(book.isAIFeatureEnabled(.chapterSummary, global) == false)
+        #expect(book.isAIFeatureEnabled(.btrChat, global) == false)
     }
 
     // MARK: - Position translation (design-roadmap.md §4.5)

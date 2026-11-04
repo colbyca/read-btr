@@ -8,8 +8,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(
-            for: [Book.self, AppSettings.self, ChapterSummary.self, EntityProfile.self, SavedQuote.self, ComprehensionCheck.self],
-            inMemory: true
-        )
+        .modelContainer(for: AppSchema.models, inMemory: true)
 }

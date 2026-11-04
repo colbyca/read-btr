@@ -25,8 +25,12 @@ into v1:
 
 - **Format**: EPUB only. PDF comes later via a simpler text-extraction path (§4.1).
 - **Reading modes**: all three (Single Word, Highlighted, Normal).
-- **AI**: Google Gemini only, behind a provider-agnostic interface. Features:
-  summaries, Q&A, comprehension checks.
+- **AI**: Google Gemini only, behind a provider-agnostic interface. Feature:
+  the **BTR chat** — ask anything about the book, spoiler-free, including
+  across earlier books in a collection (§3). Comprehension checks were dropped
+  (2026-11-04).
+- **Library**: books plus ordered **collections** (e.g. a series), which also
+  define what the BTR chat may read without spoilers.
 - **Cloud companion**: Supabase cron + Edge Function calling Gemini server-side
   for an AI-generated, personalized "daily quote" push (title + progress synced
   for personalization); "where you left off" is a local-only notification (§8) —
@@ -87,8 +91,7 @@ Reading via `EPUBThemePreferences`) for continuous vs. paginated per
 ## 3. AI features (BYOK)
 
 - Fully toggle-able from a dedicated settings/config screen — a global kill switch,
-  plus per-feature toggles (summaries / Q&A / comprehension checks can each be
-  turned off independently).
+  plus per-feature toggles (today just the BTR chat), overridable per book.
 - User supplies their own API key. Key(s) must live in the **Keychain**, never in
   UserDefaults or plain files.
 - **v1 provider: Google Gemini.** Architected behind a provider-agnostic protocol
@@ -99,23 +102,22 @@ Reading via `EPUBThemePreferences`) for continuous vs. paginated per
   not be hardcoded to Gemini's current model lineup.
 - Needs explicit privacy messaging: any AI feature sends book text to a third-party
   API. That should be opt-in and clearly disclosed, not a buried setting.
-- **v1 features: summaries, Q&A, comprehension checks.** All three are "grounded in
-  the book text" features, which raises a design question worth deciding early:
-  - Gemini's context windows are large (millions of tokens on current models),
-    which means for a lot of books we can likely just stuff the relevant chapter
-    (or even the whole book) directly into the prompt rather than building a
-    RAG/embeddings pipeline. Much simpler to build and ship, at the cost of
-    sending more tokens per request (the user's own key/cost, given BYOK).
-    Worth defaulting to this "just pass the text" approach for v1 and only reaching
-    for retrieval/embeddings later if it turns out to be necessary (huge books,
-    cost concerns, etc).
-  - Summaries: scoped to "this chapter" / "since I last opened the book" / a
-    user-selected range.
-  - Q&A: scoped to what's been read so far (avoid spoiling ahead — the request
-    should only include text up to the reader's current position).
-  - Comprehension checks: generate N questions from the just-finished
-    chapter/section; results stored locally (SwiftData) so they could feed a
-    "review what you've read" feature later.
+- **v1 feature: the BTR chat** (revised 2026-11-04; previously "summaries, Q&A,
+  comprehension checks"). Opened from the BTR entry in any reading mode, it shows
+  the 10 words either side of the selected word (tappable, to focus a question)
+  and lets the reader ask any question about the book. Summaries and "who is
+  this?" are just questions now; comprehension checks are no longer part of the
+  app. Replies are Markdown, rendered in the app. Full spec: design-roadmap.md §6.6.
+  - **Spoilers**: answers only use text the reader has reached — the open book up
+    to their position, plus any book that comes *earlier* in a collection it
+    belongs to (read in full). Later books in a collection are never used.
+  - Gemini's context windows are large, so for most cases we still "just pass the
+    text": everything readable goes in the request when it's under ~100k tokens,
+    with no RAG/embeddings pipeline. For long series that don't fit, a small
+    fixed agent asks the model for search terms (without showing it any text),
+    keyword-searches the readable text, and sends the matching paragraphs plus
+    the most recent text. Retrieval only runs over readable text, so it's
+    spoiler-safe by construction. Embeddings remain a "later, if needed".
 
 ## 4. Core technical hurdles
 
@@ -348,6 +350,8 @@ VoiceOver is running) rather than discovering it late.
 1. ~~Format priority~~ — **answered**: EPUB-first, PDF later via extract-and-reflow.
 2. ~~AI provider(s)~~ — **answered**: Gemini first, provider-agnostic interface.
 3. ~~First AI feature(s)~~ — **answered**: summaries, Q&A, comprehension checks.
+   **Revised 2026-11-04**: one BTR chat (summaries and Q&A fold into it);
+   comprehension checks dropped.
 4. ~~Distribution intent~~ — **answered**: personal use to start; paid Apple
    Developer Program membership already in place, so remote push (§8.2) is
    unblocked from day one, not gated on Apple account setup.

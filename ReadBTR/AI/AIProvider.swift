@@ -9,12 +9,37 @@ protocol AIProvider: Sendable {
     ///   - prompt: The full prompt text — callers (`PromptBuilder`) are
     ///     responsible for embedding any context/instructions; this
     ///     protocol doesn't do templating itself.
-    ///   - responseSchema: `nil`/`.plainText` for free-form prose (chapter
-    ///     summaries, entity summaries); `.json(schema:)` for a structured
-    ///     extraction the caller intends to decode (entity extraction) —
-    ///     reliability over flexibility for that one fixed, well-defined
-    ///     task (design-roadmap.md §6.6.3).
+    ///   - responseSchema: `nil`/`.plainText` for free-form prose;
+    ///     `.json(schema:)` for structured output the caller intends to
+    ///     decode (the BTR chat's retrieval plan, design-roadmap.md §6.6.3).
     func generateText(prompt: String, responseSchema: AIResponseSchema?) async throws -> String
+
+    /// A multi-turn conversation: `systemPrompt` sets the model's standing
+    /// instructions, `messages` is the conversation so far ending with the
+    /// reader's newest turn. Used by the BTR chat (design-roadmap.md §6.6).
+    func generateChatReply(systemPrompt: String, messages: [AIChatMessage]) async throws -> String
+}
+
+extension AIProvider {
+    /// Fallback for providers without native multi-turn support: flattens
+    /// the conversation into one prompt.
+    func generateChatReply(systemPrompt: String, messages: [AIChatMessage]) async throws -> String {
+        let transcript = messages.map { message in
+            "\(message.role == .user ? "Reader" : "Assistant"):\n\(message.text)"
+        }.joined(separator: "\n\n")
+        return try await generateText(prompt: "\(systemPrompt)\n\n\(transcript)\n\nAssistant:", responseSchema: .plainText)
+    }
+}
+
+/// One turn of a chat sent to `AIProvider.generateChatReply`.
+struct AIChatMessage: Equatable, Sendable {
+    enum Role: String, Sendable {
+        case user
+        case assistant
+    }
+
+    var role: Role
+    var text: String
 }
 
 /// Mirrors Gemini's `responseMimeType`/`responseSchema` generation config
@@ -22,7 +47,7 @@ protocol AIProvider: Sendable {
 /// `[String: Any]` JSON Schema-ish dict, not a Gemini-specific type) so a
 /// future second provider isn't forced into Gemini's exact request shape.
 /// `@unchecked Sendable`: `[String: Any]` isn't provably `Sendable`, but a
-/// schema dict is built once (`PromptBuilder.entityExtractionSchema`) and
+/// schema dict is built once (`PromptBuilder.retrievalPlanSchema`) and
 /// only ever read afterward — never mutated after crossing into
 /// `AIProvider.generateText`'s nonisolated context, so this is safe in
 /// practice even though the compiler can't verify it structurally.
@@ -33,7 +58,7 @@ enum AIResponseSchema: @unchecked Sendable {
 
 /// Typed failures every `AIProvider` conformance should raise through,
 /// rather than letting raw `URLError`/decoding errors leak to call sites —
-/// `BTRMenuViewModel` needs to show the user something readable regardless
+/// `BTRChatViewModel` needs to show the user something readable regardless
 /// of which provider is behind the interface.
 enum AIProviderError: Error, LocalizedError, Equatable {
     /// No provider selected, or no Keychain key for the selected provider —

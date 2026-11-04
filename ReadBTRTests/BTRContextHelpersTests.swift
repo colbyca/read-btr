@@ -41,87 +41,23 @@ struct WordStreamWindowTests {
     }
 }
 
-// MARK: - BTRContextWindow, against the real fixture
+// MARK: - BTRBookTextExtractor, against the real fixture
 
 @MainActor
-struct BTRContextWindowTests {
-    @Test func snippetAroundALocatorContainsSurroundingWords() async throws {
-        let publication = try await WordStreamTests.openFixture()
-        let chapterHref = publication.readingOrder[1].url().string
-        let stream = try #require(await WordStream.build(for: chapterHref, in: publication))
-        try #require(stream.words.count > 50)
+struct BTRBookTextExtractorTests {
+    @Test func wholeBookAndUpToAPositionDifferAndKeepChapterLabels() async throws {
+        let fixture = try await BTRChatViewModelTests.makeFixture()
+        defer { fixture.cleanup() }
 
-        // A real word-segment locator midway through the chapter — the same
-        // shape `RSVPPositionResolver` refines against for a saved RSVP
-        // position.
-        let locator = stream.words[50].locator
-        let cache = WordStreamCache()
+        let whole = await BTRBookTextExtractor.passages(of: fixture.publication, upTo: nil)
+        let soFar = await BTRBookTextExtractor.passages(of: fixture.publication, upTo: fixture.anchorLocator)
 
-        let snippet = try #require(
-            await BTRContextWindow.snippet(around: locator, in: publication, cache: cache, radius: 20))
-
-        #expect(!snippet.isEmpty)
-        // ±20 words around index 50 should include the word at index 50
-        // itself.
-        #expect(snippet.contains(stream.words[50].text))
-    }
-
-    @Test func snippetReturnsNilForAnUnresolvableHref() async throws {
-        let publication = try await WordStreamTests.openFixture()
-        let locator = try RSVPPositionResolverTests.makeLocator(progression: 0.5)
-        let cache = WordStreamCache()
-
-        // `RSVPPositionResolverTests.makeLocator`'s href ("chapter1.xhtml")
-        // isn't a real resource in alice.epub.
-        let snippet = await BTRContextWindow.snippet(around: locator, in: publication, cache: cache, radius: 20)
-        #expect(snippet == nil)
-    }
-}
-
-// MARK: - BTREntityContextGatherer, against the real fixture
-
-@MainActor
-struct BTREntityContextGathererTests {
-    @Test func gathersSnippetsMentioningAKnownName() async throws {
-        let publication = try await WordStreamTests.openFixture()
-        let chapterHref = publication.readingOrder[1].url().string
-
-        let snippets = await BTREntityContextGatherer.gatherSnippets(
-            forEntityNamed: "Alice", upThroughResourceHref: chapterHref, in: publication)
-
-        #expect(!snippets.isEmpty)
-        #expect(snippets.localizedCaseInsensitiveContains("Alice"))
-    }
-
-    @Test func returnsEmptyForANameThatNeverAppears() async throws {
-        let publication = try await WordStreamTests.openFixture()
-        let chapterHref = publication.readingOrder[1].url().string
-
-        let snippets = await BTREntityContextGatherer.gatherSnippets(
-            forEntityNamed: "Zzyzxqplorp", upThroughResourceHref: chapterHref, in: publication)
-
-        #expect(snippets.isEmpty)
-    }
-
-    @Test func returnsEmptyForAnUnknownResourceHref() async throws {
-        let publication = try await WordStreamTests.openFixture()
-        let snippets = await BTREntityContextGatherer.gatherSnippets(
-            forEntityNamed: "Alice", upThroughResourceHref: "does-not-exist.xhtml", in: publication)
-        #expect(snippets.isEmpty)
-    }
-
-    @Test func respectsTheMaxSnippetCap() async throws {
-        let publication = try await WordStreamTests.openFixture()
-        // The last resource in the reading order — searching "the" (an
-        // extremely common word) across the *whole* book up to here should
-        // still stop at `maxSnippets`, not grow unbounded.
-        let lastHref = publication.readingOrder.last!.url().string
-
-        let snippets = await BTREntityContextGatherer.gatherSnippets(
-            forEntityNamed: "the", upThroughResourceHref: lastHref, in: publication)
-
-        let paragraphCount = snippets.isEmpty ? 0 : snippets.components(separatedBy: "\n\n").count
-        #expect(paragraphCount <= BTREntityContextGatherer.maxSnippets)
+        #expect(!soFar.isEmpty)
+        #expect(soFar.count < whole.count)
+        // Up-to-position text is a prefix of the whole book's text.
+        #expect(Array(whole.prefix(soFar.count - 1)) == Array(soFar.dropLast()))
+        #expect(whole.allSatisfy { !$0.chapter.isEmpty })
+        #expect(Set(whole.map(\.chapter)).count > 1)
     }
 }
 

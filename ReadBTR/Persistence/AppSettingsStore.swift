@@ -8,6 +8,7 @@ enum AppSettingsStore {
     @MainActor
     static func current(in context: ModelContext) -> AppSettings {
         if let existing = try? context.fetch(FetchDescriptor<AppSettings>()).first {
+            existing.normalizeAIFeatureFlags()
             return existing
         }
 

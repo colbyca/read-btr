@@ -5,7 +5,7 @@ final class ReadBTRUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Add Book"].exists)
+        XCTAssertTrue(app.buttons["home-add"].exists)
     }
 
     func testAddBookOpensFileImporter() {
@@ -17,12 +17,19 @@ final class ReadBTRUITests: XCTestCase {
         screenshotBefore.lifetime = .keepAlways
         add(screenshotBefore)
 
-        app.buttons["Add Book"].tap()
+        app.buttons["home-add"].tap()
+        // The Add tile first asks whether to add a book or a collection.
+        let addBook = app.buttons["add-book"].firstMatch
+        XCTAssertTrue(addBook.waitForExistence(timeout: 5))
+        addBook.tap()
 
         // The system document picker is a separate process/UI; assert on
         // its "Cancel" button rather than any ReadBTR-owned element to
-        // confirm `.fileImporter` actually presented it.
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        // confirm `.fileImporter` actually presented it. The picker's
+        // service can take several seconds to cold-start on a freshly
+        // booted simulator (it shows a blank sheet until then), so wait
+        // longer than for in-app UI.
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 15))
 
         let screenshotPicker = XCTAttachment(screenshot: app.screenshot())
         screenshotPicker.name = "file-importer-presented"
