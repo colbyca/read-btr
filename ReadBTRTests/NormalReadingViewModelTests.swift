@@ -54,6 +54,24 @@ struct NormalReadingViewModelTests {
                 == viewModel.book.position.locatorJSON)
     }
 
+    @Test func topTapShowsToolbarAndAnyTapHidesIt() async throws {
+        let (viewModel, _, cleanup) = try await Self.makeLoadedViewModel()
+        defer { cleanup() }
+
+        viewModel.handleTap(isInTopZone: false)
+        #expect(viewModel.isShowingToolbar == false)
+
+        viewModel.handleTap(isInTopZone: true)
+        #expect(viewModel.isShowingToolbar == true)
+
+        viewModel.handleTap(isInTopZone: false)
+        #expect(viewModel.isShowingToolbar == false)
+
+        viewModel.isShowingToolbar = true
+        viewModel.handleTap(isInTopZone: true)
+        #expect(viewModel.isShowingToolbar == false)
+    }
+
     @Test func selectChapterHidesTheToolbar() async throws {
         let (viewModel, _, cleanup) = try await Self.makeLoadedViewModel()
         defer { cleanup() }

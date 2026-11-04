@@ -105,16 +105,13 @@ final class NormalReadingViewModel {
                 self?.persistPosition(from: locator)
                 // Scrolling/turning a page while reading is the natural
                 // "I'm reading again" signal, so it hides the toolbar the
-                // same way resuming playback does in RSVP/Guided Reading —
-                // there's no second "tap at top" to toggle it back off,
-                // since once visible the toolbar itself physically covers
-                // that same top zone (confirmed empirically: a tap there
-                // lands on the navigation bar, not the page underneath).
+                // same way resuming playback does in RSVP/Guided Reading
+                // (a plain tap on the page hides it too — see `handleTap`).
                 self?.isShowingToolbar = false
             }
         }
-        host.onTopTap = { [weak self] in
-            self?.isShowingToolbar = true
+        host.onTap = { [weak self] isInTopZone in
+            self?.handleTap(isInTopZone: isInTopZone)
         }
         host.onBTRRequested = { [weak self] selection in
             guard let self, self.isBTRAvailable else { return }
@@ -123,6 +120,17 @@ final class NormalReadingViewModel {
         }
         host.onSaveQuoteRequested = { [weak self] selection in
             self?.saveQuote(from: selection)
+        }
+    }
+
+    /// A tap at the top of the page reveals the toolbar; while it's shown,
+    /// any tap on the page (anywhere but the toolbar's own buttons, which
+    /// never reach the navigator) hides it again.
+    func handleTap(isInTopZone: Bool) {
+        if isShowingToolbar {
+            isShowingToolbar = false
+        } else if isInTopZone {
+            isShowingToolbar = true
         }
     }
 

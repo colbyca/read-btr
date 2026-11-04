@@ -158,6 +158,22 @@ final class RSVPViewModel {
         isShowingBTRTooltip = false
     }
 
+    /// A tap outside the reading target (word/highlighted line) shows the
+    /// toolbar, or hides it again if it's already showing — so any tap
+    /// other than on the toolbar's own buttons dismisses it.
+    func toggleToolbar() {
+        if isShowingToolbar {
+            hideToolbar()
+        } else {
+            showToolbar()
+        }
+    }
+
+    func hideToolbar() {
+        isShowingToolbar = false
+        isShowingBTRTooltip = false
+    }
+
     /// Long-pressing the current word shows the BTR tooltip and pauses,
     /// mirroring `showToolbar()`'s identical "any interaction with the
     /// word pauses" rule (design-roadmap.md §6.6.1).
