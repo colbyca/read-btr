@@ -31,6 +31,7 @@ struct BTRChatViewModelTests {
 
     /// A real imported `Book`/`Publication` and a real word locator midway
     /// through the first real chapter.
+    @MainActor
     struct Fixture {
         let book: Book
         let publication: Publication

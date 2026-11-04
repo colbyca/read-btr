@@ -260,7 +260,7 @@ final class BTRChatViewModel {
 
     /// Models sometimes wrap a whole Markdown reply in a ```markdown fence
     /// despite being told not to; unwrap it so it renders.
-    static func cleanReply(_ text: String) -> String {
+    nonisolated static func cleanReply(_ text: String) -> String {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         for opener in ["```markdown\n", "```md\n", "```\n"] where trimmed.hasPrefix(opener) && trimmed.hasSuffix("```") {
             trimmed = String(trimmed.dropFirst(opener.count).dropLast(3))

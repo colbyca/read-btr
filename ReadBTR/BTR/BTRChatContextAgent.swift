@@ -116,20 +116,20 @@ final class BTRChatContextAgent {
 
     // MARK: - Pure helpers (unit-tested)
 
-    static func header(for text: BTRBookText) -> String {
+    nonisolated static func header(for text: BTRBookText) -> String {
         text.isCurrentBook
             ? "=== \(text.title) (current book, from the start up to the reader's position) ==="
             : "=== \(text.title) (an earlier book the reader has finished) ==="
     }
 
     /// Every readable passage, grouped under book and chapter headings.
-    static func formatFullText(_ texts: [BTRBookText]) -> String {
+    nonisolated static func formatFullText(_ texts: [BTRBookText]) -> String {
         texts.map { text in
             header(for: text) + "\n" + formatPassages(text.passages[...])
         }.joined(separator: "\n\n")
     }
 
-    private static func formatPassages(_ passages: ArraySlice<BTRTextPassage>, gapsBefore: Set<Int> = []) -> String {
+    private nonisolated static func formatPassages(_ passages: ArraySlice<BTRTextPassage>, gapsBefore: Set<Int> = []) -> String {
         var lines: [String] = []
         var currentChapter: String?
         for index in passages.indices {
@@ -151,7 +151,7 @@ final class BTRChatContextAgent {
     /// the search terms appear, and the best paragraphs (each with the one
     /// before it, for context) fill `searchBudget`. Output keeps reading
     /// order.
-    static func retrieve(terms rawTerms: [String], from texts: [BTRBookText], recentBudget: Int, searchBudget: Int)
+    nonisolated static func retrieve(terms rawTerms: [String], from texts: [BTRBookText], recentBudget: Int, searchBudget: Int)
         -> String
     {
         let terms = Array(
@@ -251,7 +251,7 @@ final class BTRChatContextAgent {
     }
 
     /// Case-insensitive whole-word occurrences (`text` already lowercased).
-    static func occurrences(of term: String, in text: String) -> Int {
+    nonisolated static func occurrences(of term: String, in text: String) -> Int {
         var count = 0
         var searchRange = text.startIndex..<text.endIndex
         while let range = text.range(of: term, range: searchRange) {
@@ -265,7 +265,7 @@ final class BTRChatContextAgent {
 
     /// Words worth searching for when the model's plan isn't available:
     /// the reader's selection, plus the question's longer non-filler words.
-    static func fallbackTerms(question: String, selectedText: String?) -> [String] {
+    nonisolated static func fallbackTerms(question: String, selectedText: String?) -> [String] {
         var terms: [String] = []
         if let selectedText {
             let cleaned = selectedText.replacingOccurrences(of: "…", with: " ")
@@ -277,7 +277,7 @@ final class BTRChatContextAgent {
         return terms
     }
 
-    private static let stopWords: Set<String> = [
+    private nonisolated static let stopWords: Set<String> = [
         "what", "when", "where", "which", "while", "who's", "whom", "whose", "why's", "that", "this", "these",
         "those", "there", "their", "they", "them", "then", "than", "have", "been", "does", "doing", "done",
         "about", "would", "could", "should", "with", "from", "into", "just", "like", "said", "says", "tell",
