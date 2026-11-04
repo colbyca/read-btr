@@ -62,6 +62,8 @@ struct BTRChatView: View {
                         wordButton(word)
                     }
                 }
+                // Containers, so each child keeps its own identifier.
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("btr-chat-passage")
 
                 Text(passageCaption)
@@ -148,6 +150,7 @@ struct BTRChatView: View {
                 .font(.callout)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("btr-chat-empty")
     }
 

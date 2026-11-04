@@ -44,6 +44,9 @@ struct BTRSelectionTooltip: View {
         .padding(.vertical, 10)
         .background(.regularMaterial, in: Capsule())
         .shadow(radius: 4)
+        // A container, so each button keeps its own `btr-tooltip-*`
+        // identifier instead of inheriting this one.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("btr-selection-tooltip")
     }
 

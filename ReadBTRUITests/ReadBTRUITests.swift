@@ -25,8 +25,11 @@ final class ReadBTRUITests: XCTestCase {
 
         // The system document picker is a separate process/UI; assert on
         // its "Cancel" button rather than any ReadBTR-owned element to
-        // confirm `.fileImporter` actually presented it.
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        // confirm `.fileImporter` actually presented it. The picker's
+        // service can take several seconds to cold-start on a freshly
+        // booted simulator (it shows a blank sheet until then), so wait
+        // longer than for in-app UI.
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 15))
 
         let screenshotPicker = XCTAttachment(screenshot: app.screenshot())
         screenshotPicker.name = "file-importer-presented"
