@@ -7,9 +7,9 @@ handed to an implementing agent directly — Swift signatures here are
 design-level (illustrative field lists and function shapes), not final code, but
 should be close enough to build from without re-deriving the architecture.
 
-Status: **Design — not yet implemented.** The only code that exists today is the
-Readium spikes under `ReadBTR/Spike/` and `ReadBTRTests/ReadiumSpikeTests.swift`
-(see `dev.md` §9), which this design builds directly on top of.
+Status: **Built, and kept current as the design changes.** Last major revision
+2026-11-04: the BTR menu became the **BTR chat** (§6.6), comprehension checks
+were removed from the app, and **book collections** were added (§2.12, §6.1.1).
 
 Terminology note: this doc renames dev.md's "Single Word Reading" to **RSVP**
 and "Highlighted Reading" to **Guided Reading** — same features, tighter names.
@@ -34,10 +34,10 @@ ReadBTR/
     RSVP/
     GuidedReading/
     Normal/
-  BTR/                  — BTR menu, entity extraction, chapter summaries (§7.6)
+  BTR/                  — BTR chat: chat screen, context agent, passage builder (§6.6)
   AI/                   — AIProvider protocol, GeminiProvider, prompt builders
   Settings/              — configuration page + view models (§7.2)
-  Home/                  — library grid, search, add-book flow (§7.1)
+  Home/                  — library grid, search, add flow, collections (§6.1)
   DesignSystem/          — Catppuccin tokens, shared components (dev.md §10)
   Supabase/              — disabled-by-default sync stub (§9)
   Spike/                 — existing throwaway Readium spikes; superseded
@@ -59,8 +59,8 @@ Two kinds of types throughout this section:
 
 - **`@Model` classes** — SwiftData-persisted entities with real identity and,
   where relevant, relationships: things that form a *collection* (a book has
-  many chapter summaries, many entity profiles, many saved quotes) or that
-  benefit from independent querying.
+  many saved quotes, and many places in book collections) or that benefit
+  from independent querying.
 - **Plain `Codable` structs** — embedded directly as properties on a `@Model`
   (SwiftData persists `Codable` value types natively). Used for anything that's
   inherently 1:1 with its owner and never queried independently — a book's
@@ -96,9 +96,10 @@ final class Book {
     /// settings, AI feature flags) — split out per instruction; see §2.5.
     var settingsOverride: BookSettingsOverride?
 
-    @Relationship(deleteRule: .cascade) var chapterSummaries: [ChapterSummary] = []
-    @Relationship(deleteRule: .cascade) var entityProfiles: [EntityProfile] = []
     @Relationship(deleteRule: .cascade) var savedQuotes: [SavedQuote] = []
+    /// This book's places in collections (§2.12). Deleting the book
+    /// removes it from every collection; the collections stay.
+    @Relationship(deleteRule: .cascade) var collectionEntries: [CollectionEntry] = []
 }
 
 enum BookFormat: String, Codable { case epub }
@@ -186,13 +187,19 @@ struct AIFeatureFlag: Codable, Equatable {
 /// AppSettings, BookSettingsOverride, or the config page UI has to change,
 /// since both iterate `AIFeatureKey.allCases`.
 enum AIFeatureKey: String, Codable, CaseIterable {
-    case chapterSummary
-    case entityExtraction
-    case comprehensionCheck
-    // dev.md §3 also names summaries/Q&A/comprehension-checks as v1 AI
-    // features; entityExtraction is the BTR-menu character/location lookup.
+    case btrChat      // the BTR chat (§6.6) — currently the only AI feature
 }
 ```
+
+**Legacy keys.** Builds before 2026-11-04 stored `chapterSummary`,
+`entityExtraction`, `questionAnswering` and `comprehensionCheck`. Saved settings
+must keep decoding, so `AIFeatureKey`/`AIFeatureFlag` decode those raw values
+too: the three old BTR menu features map to `.btrChat` (keeping their on/off
+state, "on if any was on"), and `comprehensionCheck` is decoded as a *retired*
+flag that's dropped. `[AIFeatureFlag].normalized` collapses the result to one
+flag per key, and `AppSettingsStore.current` writes the cleaned array back.
+Never encode a legacy key; never remove a raw value from this mapping while
+old stores might exist.
 
 ```swift
 struct BookSettingsOverride: Codable, Equatable {
@@ -223,10 +230,10 @@ extension Book {
 
     func isAIFeatureEnabled(_ key: AIFeatureKey, _ global: AppSettings) -> Bool {
         guard global.aiProviderIsUsable, global.aiFeaturesMasterToggle else { return false }
-        if let override = settingsOverride?.aiFeatureFlagOverrides.first(where: { $0.key == key }) {
+        if let override = settingsOverride?.aiFeatureFlagOverrides.flag(for: key) {
             return override.isEnabled
         }
-        return global.aiFeatureFlags.first(where: { $0.key == key })?.isEnabled ?? false
+        return global.aiFeatureFlag(for: key)?.isEnabled ?? false   // via .normalized
     }
 }
 ```
@@ -282,69 +289,34 @@ protocol AIKeyStore {
 ```swift
 protocol AIProvider {
     func generateText(prompt: String, responseSchema: AIResponseSchema?) async throws -> String
+    /// Multi-turn chat with standing instructions (the BTR chat, §6.6).
+    func generateChatReply(systemPrompt: String, messages: [AIChatMessage]) async throws -> String
 }
 
 enum AIResponseSchema {
     case plainText
     case json(schema: [String: Any])   // mirrors Gemini's `responseSchema`
 }
+
+struct AIChatMessage { var role: Role /* .user, .assistant */; var text: String }
 ```
 
-`GeminiProvider: AIProvider` is the only conformance for MVP. Every AI feature
-in §7.6 goes through this one interface — chapter summaries and comprehension
-checks use `.plainText`, entity extraction uses `.json(schema:)` for reliable
-parsing (see §7.6.4).
+`GeminiProvider: AIProvider` is the only conformance for MVP. It maps
+`generateChatReply` onto Gemini's native `systemInstruction` plus alternating
+`user`/`model` `contents`. A protocol extension provides a fallback
+`generateChatReply` that flattens the conversation into one `generateText`
+prompt, so a future provider only has to implement `generateText` to work.
+The BTR chat's retrieval plan (§6.6.3) uses `.json(schema:)`; replies are
+free-form Markdown.
 
-### 2.9 `ChapterSummary`
+### 2.9 / 2.10 Removed: `ChapterSummary`, `EntityProfile` (and `ComprehensionCheck`)
 
-```swift
-@Model
-final class ChapterSummary {
-    var id: UUID
-    var chapterHref: String              // Readium resource href — see decision
-                                          // log (§10) for why "chapter" ==
-                                          // "spine item" for MVP
-    var chapterTitle: String?
-    var content: String
-    var sourceEndLocatorJSON: String     // how far into the chapter this
-                                          // summary covers — the staleness key
-    var generatedAt: Date
-    var book: Book?
-}
-```
-
-**Cache/staleness rule**: reuse an existing `ChapterSummary` for
-`(book, chapterHref)` as long as the reader's current position is at or before
-`sourceEndLocatorJSON`'s progression. If they've read further into the same
-chapter since the summary was generated, regenerate and overwrite on next
-request. This directly satisfies "also save these" while keeping the summary
-honest about what it actually covers.
-
-### 2.10 `EntityProfile`
-
-```swift
-enum EntityKind: String, Codable { case character, location }
-
-@Model
-final class EntityProfile {
-    var id: UUID
-    var canonicalName: String    // trimmed + lowercased — the dedup key
-    var displayName: String      // original casing, for UI
-    var kind: EntityKind
-    var summary: String
-    var firstMentionLocatorJSON: String
-    var generatedAt: Date
-    var book: Book?
-}
-```
-
-**Dedup rule**: before firing the second-stage "gather context + summarize"
-request (§7.6.4), check `book.entityProfiles` for a `canonicalName` match. If
-found, show it immediately — no new API call. This is the direct answer to
-"figure out the best way to store this data in the context of the Book model":
-a separate `@Model`, cascade-deleted with its book, deduplicated by a
-normalized name field. (Known MVP limitation: exact/normalized string match
-only — "Alice" and "Alice Liddell" won't merge. Fine to punt on fuzzy matching.)
+These were caches behind the old BTR menu's fixed options (chapter summary,
+character/location lookup) and the comprehension-check feature. The BTR chat
+(§6.6) answers those questions on demand instead, and comprehension checks are
+no longer part of the app. The models were dropped from the schema on
+2026-11-04; SwiftData removes their tables in a lightweight migration the first
+time the new schema opens an older store (`Persistence/AppSchema.swift`).
 
 ### 2.11 `SavedQuote`
 
@@ -363,6 +335,44 @@ final class SavedQuote {
 ```
 
 Populated by Guided Reading's multi-word "save quote" action (§7.4).
+
+### 2.12 `BookCollection` + `CollectionEntry`
+
+```swift
+@Model
+final class BookCollection {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var createdAt: Date
+    @Relationship(deleteRule: .cascade) var entries: [CollectionEntry] = []
+}
+
+@Model
+final class CollectionEntry {
+    var position: Int             // 0-based reading order, kept dense
+    var collection: BookCollection?
+    var book: Book?
+}
+```
+
+A named, **ordered** group of books — usually a series. A book can be in any
+number of collections and always still appears in the library on its own.
+Membership lives on `CollectionEntry` rows rather than a plain
+`[Book]` relationship because SwiftData doesn't preserve the order of a
+to-many relationship, and the order is load-bearing: it's what the BTR chat's
+spoiler rule runs on (§6.6.3). Deleting a collection deletes its entries, never
+its books; deleting a book deletes its entries, never the collection.
+
+Helpers on `BookCollection`: `orderedBooks`, `append(_:in:)` (no duplicates),
+`remove(_:in:)` and `move(fromOffsets:toOffset:)` (SwiftUI `onMove`
+semantics), all renumbering positions densely.
+
+**Spoiler scope** — `Book.earlierBooksInCollections`: for every collection
+the book is in, the books *before* it in that collection's order, combined
+across collections in collection-name order, de-duplicated, excluding the book
+itself. Books *after* it in a collection are never included. If the same two
+books are in opposite orders in two collections, each counts as "earlier" for
+the other — the reader's own ordering is taken at its word.
 
 ---
 
@@ -570,17 +580,39 @@ note it here so it isn't forgotten, don't build it yet.
 ### 6.1 Home
 
 - `ScrollView` + `LazyVGrid` with 3 fixed columns. First grid cell is a
-  pinned "add book" tile that triggers the `.fileImporter` flow (§5); the rest
-  are `Book` covers, newest-opened-first or however the library is sorted
-  (open question — not blocking, pick one and move on).
-- Search: a simple in-memory filter over `title`/`author` — library sizes are
-  personal-scale, no need for a SwiftData `#Predicate`-backed search index.
+  pinned **Add** tile; then one tile per collection (a fanned stack of its
+  first covers, with its name and book count); then every `Book` cover,
+  most-recently-opened first.
+- **Add** asks, in a confirmation dialog, whether to **Add Book** (the
+  `.fileImporter` flow, §5) or start a **New Collection** (§6.1.1).
+- Long-pressing a book offers **Add to Collection ▸** (each collection, with a
+  checkmark on ones it's already in — tapping toggles membership — plus
+  **New Collection…**, which starts a collection with that book in it) and
+  **Delete Book**.
+- Search: a simple in-memory filter over `title`/`author`, and collections by
+  name or by any of their books' titles — library sizes are personal-scale, no
+  need for a SwiftData `#Predicate`-backed search index.
 - Settings icon (top right) → Configuration page in **global** mode (§6.2).
 - Tapping a book → a sheet built from `ReadingModeRegistry.all` (§3) — one
   option per registered mode, not three hardcoded buttons. Selecting a mode
   calls `ReadingModeRegistry.makeView(for:book:)`, which reads
   `book.currentLocator`/`currentRSVPIndex` to land exactly where the user left
   off (§4.5).
+
+#### 6.1.1 Collections
+
+- **New Collection** sheet: a name field, then "Books, in reading order" —
+  **Add Books from Library** opens a multi-select picker that numbers books in
+  the order they're tapped; the list can be dragged to reorder and swiped to
+  remove before creating. A footer explains that order is what keeps the BTR
+  chat spoiler-free.
+- **Collection screen** (tapping a collection tile pushes it): the books as a
+  numbered list in reading order with covers. Tapping a book opens the same
+  reading-mode picker as the library. **Add Books ▸ From Library / Import
+  EPUB** (an import is added to the end of the collection as well as the
+  library). **Reorder** toggles edit mode for drag handles; swipe a row to
+  **Remove** it from the collection (the book stays in the library). The
+  **⋯** menu has **Rename** and **Delete Collection** (books are kept).
 
 ### 6.2 Configuration page
 
@@ -594,7 +626,8 @@ Sections: theme (background/text/highlight color, font, size, spacing,
 margins — `ReaderTheme`), per-mode settings (RSVP speed/smart-timing/skip
 increments, Guided Reading speed/granularity, Normal layout —
 `ReaderSettings`), AI (master toggle, provider picker, API key entry →
-`AIKeyStore`, per-feature toggles iterating `AIFeatureKey.allCases`).
+`AIKeyStore`, per-feature toggles iterating `AIFeatureKey.allCases` — today
+just **BTR Chat**).
 "If a provider or key is not given, AI features should be disabled" is
 enforced by `AppSettings.aiProviderIsUsable` gating the whole AI section's
 interactivity, not just hiding it.
@@ -636,125 +669,143 @@ interactivity, not just hiding it.
   host view, but all three modes present the *same* `ReadingToolbar`
   component — don't fork the toolbar itself per mode.
 
-### 6.6 The BTR menu
+### 6.6 The BTR chat
 
-The app's headline feature — an AI-assisted "what/who is this" and
-"what happened so far" layer available from every reading mode.
+The app's headline feature: from any reading mode, ask any question about the
+book — who someone is, what just happened, what a passage means — and get an
+answer that never spoils anything ahead. Gated on `AIFeatureKey.btrChat` via
+`Book.isAIFeatureEnabled` (master toggle, provider + key, the flag, any
+per-book override): `BTRChatViewModel.make(...)` returns `nil` and
+`isAvailable(for:modelContext:)` hides the BTR entry point in every mode when
+it's off.
+
+(Replaces the old BTR menu — a fixed menu of entity chips, "summarize since
+start of chapter", comprehension checks and Q&A — on 2026-11-04. Those
+questions are now just things you can ask; the chat offers a few as starter
+suggestions.)
 
 #### 6.6.1 Activation, per mode
 
+Unchanged from the BTR menu — the BTR icon simply opens the chat:
+
 - **RSVP**: long-press the current word → tooltip with **Define**,
-  **View Surrounding**, and a BTR icon.
+  **View Surrounding**, **Save Quote** and **BTR**.
   - *Define* → `UIReferenceLibraryViewController` (see decision log, §10) —
     the system "Look Up" panel, no new dependency, offline.
   - *View Surrounding* → a modal presenting `NormalReadingView` (the same
     component from §6.5, reused, not reimplemented) in scrolling mode,
-    centered on the current locator. Selecting text there re-triggers the
-    tooltip in Normal-view context.
-- **Guided Reading**: while paused, long-press a word → the same tooltip,
-  plus drag-handles on either end of the selection (Readium's
-  `SelectableNavigator` interface, documented but not yet spiked). Selecting
-  more than one word swaps *Define* for **Save Quote** (writes a
-  `SavedQuote`, §2.11); the BTR icon is available at any selection size.
-- **Normal**: native WebView text selection, with the same tooltip appended
-  as a custom `EditingAction` on `EPUBNavigatorViewController.Configuration`
-  (documented in Readium's SwiftUI guide as exactly this pattern — appending
-  actions to the default text-selection menu, not yet spiked but
-  low-risk/well-documented).
+    centered on the current locator.
+- **Guided Reading**: while paused, long-press a word → the same tooltip;
+  selecting more than one word swaps *Define* for **Save Quote** (§2.11); the
+  BTR icon is available at any selection size.
+- **Normal**: native WebView text selection, with **Save Quote** and **BTR**
+  appended as custom `EditingAction`s.
 
-#### 6.6.2 The BTR menu screen
+Each mode keeps the open `BTRChatViewModel` for as long as the full-screen
+cover is shown, so a re-render of the reading view can't reset the
+conversation.
 
-Tapping the BTR icon opens a vertical split view: top half is `NormalReadingView`
-(read-only) centered on the current selection/position; bottom half is the
-"BTR options" panel. Back arrow (top left) returns to the originating reading
-mode, resuming paused if that mode was paused.
+#### 6.6.2 The chat screen
 
-#### 6.6.3 Option 1 — entity extraction (deterministic two-step pipeline)
+Full-screen cover, title "BTR Chat", back arrow top left (returns to the
+reading mode exactly as paused as it was).
 
-Per the scoping decision in §10: a fixed, hard-coded pipeline, not a
-tool-calling agent loop, for MVP.
+1. **Passage strip** (top): the word the chat was opened from plus the
+   **10 words before and 10 after**, laid out like text (`FlowLayout`). Each
+   word is a tappable chip; the anchor word(s) start selected. Tapping toggles
+   a word's selection, so the reader can point the question at a name or
+   phrase ("who is *she*?"). For a Guided/Normal multi-word selection, the
+   whole selection is the anchor (capped at 30 words). Built by
+   `BTRContextWords` from the anchor's `WordStream`: the anchor run is the
+   occurrence of the selection's words nearest its progression estimate, and
+   punctuation is restored from each word segment's `text.after`. A caption
+   explains selection, and says when earlier books in a collection are being
+   drawn on.
+2. **Conversation**: reader messages right-aligned; replies left-aligned and
+   rendered as **Markdown** (`MarkdownText`). While a reply is pending, its
+   bubble shows a spinner and the agent's status ("Reading "Book One"…",
+   "Searching what you've read…", "Thinking…"). Failed replies show the error
+   and **Try Again**. Empty state: a one-line explanation plus starter
+   suggestions ("Summarize this chapter so far", "Who are the main characters
+   so far?", "What does this passage mean?").
+3. **Input bar**: multi-line text field + send button.
 
-**Step 1 — extraction, fires automatically on menu open:**
-1. Resolve the current position to a word index (§4.5) and slice ±100 words
-   from the same `WordStream` (clamped to the current resource if the window
-   would cross a chapter boundary — accepted MVP simplification, see §10).
-2. Send one `AIProvider.generateText` call: the sliced text + book title,
-   requesting **structured JSON output** (`.json(schema:)`, §2.8) shaped like:
-   ```json
-   { "entities": [ { "name": "White Rabbit", "kind": "character" } ] }
-   ```
-   Structured output (not free-text parsing) is the point of using
-   `responseSchema` here — reliability over flexibility for a fixed,
-   well-defined extraction task.
-3. Render each entity as a selectable chip in the BTR options panel.
+The conversation lives only as long as the chat is open; it isn't persisted.
 
-**Step 2 — summary, fires when the user taps a chip:**
-1. Check `book.entityProfiles` for a `canonicalName` match (§2.10). If found,
-   display immediately — no API call.
-2. Otherwise, gather context: walk `publication.readingOrder` from the start
-   up to (and including) the current resource, run each through the Content
-   API (proven fast in the phase-1 spike — ~1000 elements for a full novel in
-   a fraction of a second), and collect snippets around case-insensitive
-   substring matches of the entity's name. (This deliberately mirrors
-   dev.md §3's Q&A spoiler-avoidance rule: only text the reader has already
-   reached.)
-3. One more `AIProvider.generateText` call: the gathered snippets + book
-   title + entity name/kind, requesting a plain-text character/location
-   summary.
-4. Save as a new `EntityProfile`, display it, replacing the loading state.
+#### 6.6.3 The context agent — spoiler-free, across a collection
 
-#### 6.6.4 Option 2 — "summarize since start of chapter" (static option)
+`BTRChatContextAgent` gathers the book text each question is answered from.
+**What it may read** (the spoiler rule):
 
-1. Range is `[start of current resource, current locator]` — "chapter" ==
-   "spine item" for MVP (see decision log, §10).
-2. Check for a fresh cached `ChapterSummary` first (§2.9's staleness rule).
-3. If none/stale, extract the range's text via the Content API, one
-   `AIProvider.generateText` call (`.plainText`), save/overwrite the
-   `ChapterSummary`, display it.
+| Book | Readable text |
+|---|---|
+| Earlier in any collection the open book is in (`Book.earlierBooksInCollections`, §2.12) | the whole book |
+| The open book | from the start up to the anchor position the chat was opened at |
+| Later in a collection, or in no shared collection | nothing |
 
-Both options follow the same UI shape: selecting an option swaps the bottom
-panel for a loading indicator, then swaps that for the result — one shared
-"pending → result" component in `BTR/`, not two bespoke implementations.
+Text comes from `BTRBookTextExtractor`: each readable resource walked through
+the Content API (`BTRChapterTextExtractor.textPieces`), as paragraph-level
+`BTRTextPassage`s labelled with their TOC chapter title. Earlier books are
+opened on demand with `PublicationLoader`; their full text is kept in an
+in-memory `BTRBookTextCache` (8 books) since it never changes. The open book's
+text is extracted once per chat session. An earlier book that can't be opened
+is skipped and left out of the system prompt.
 
-#### 6.6.5 Comprehension checks and Q&A (dev.md §3)
+**How much it sends:**
 
-Both are extra BTR options, shown only when their `AIFeatureKey`
-(`.comprehensionCheck`, `.questionAnswering`) is on for the book.
+- **≤ 400k characters (~100k tokens) readable in total** → everything, grouped
+  under book and chapter headers. This is the common case (one book, or a
+  short series) and needs no planning call — dev.md §3's "just pass the text".
+- **More than that** (a long series) → two steps:
+  1. *Plan*: one `generateText` call with `.json(schema:)`
+     (`PromptBuilder.retrievalPlanPrompt`) — the question, the selected words,
+     the last few chat turns and the book titles, but **no book text** —
+     returns up to 8 `searchTerms`. If planning fails, terms fall back to the
+     selection and the question's longer non-filler words.
+  2. *Retrieve*: score every readable paragraph outside the recent window by
+     whole-word term hits (multi-word terms weigh more), and take the best
+     paragraphs, each with the one before it, up to 80k characters; always add
+     the open book's most recent 60k characters before the reader's position.
+     Output keeps reading order, with `[…]` marking gaps.
 
-**Comprehension check** ("Check My Understanding"):
-1. Range is the same as §6.6.4: `[start of current resource, current
-   locator]`, so a check never asks about text the reader hasn't reached.
-2. Reuse the newest saved `ComprehensionCheck` for this chapter if it still
-   covers the reader's position (same staleness rule as `ChapterSummary`),
-   so reopening the menu shows earlier answers. "New Questions" forces a
-   fresh set.
-3. Otherwise one `generateText` call with `.json(schema:)` asking for 3
-   multiple-choice questions (`question`, 4 `choices`, `correctChoiceIndex`,
-   `explanation`). Malformed questions are dropped; the rest are saved as a
-   new `ComprehensionCheck` row.
-4. Tapping a choice locks it in (first answer wins), marks it right/wrong and
-   shows the explanation. `completedAt` is set once every question is
-   answered, so saved checks can feed a later "review what you've read"
-   feature.
+  The search only ever runs over readable text, so even a search term the
+  model drew from its own knowledge of the series can't surface a spoiler.
 
-**Q&A** ("Ask a Question"):
-1. Context is all text from the start of the book up to the anchor locator
-   (`BTRReadSoFarTextExtractor`) — dev.md §3's spoiler rule. Capped at
-   600k characters (~150k tokens), keeping the most recent text, to bound
-   per-question cost on the reader's own key.
-2. One `.plainText` call per question. The prompt forbids outside knowledge
-   of the book's plot and anything past the given text, and passes the last
-   4 exchanges so follow-ups make sense.
-3. Exchanges live only for the menu session; they aren't persisted.
+#### 6.6.4 Prompts
+
+- **System prompt** (`PromptBuilder.chatSystemPrompt`, sent as Gemini's
+  `systemInstruction`): BTR's role; what the reader has read (earlier titles in
+  order, the current book up to their position); the spoiler rules (answer only
+  from the excerpts, no outside knowledge of these books' plots, never hint at
+  anything later, say plainly when they haven't got there yet or the excerpts
+  don't say); and **formatting**: GitHub-flavored Markdown, `**bold**` names,
+  short paragraphs, lists for several points, `###` headings only for longer
+  answers, `>` blockquotes for short quotes, no wrapping code fence.
+- **Each question** (`PromptBuilder.chatTurn`): the excerpts, the passage the
+  chat was opened from and the selected words, then the question. Earlier turns
+  go along as plain question/answer messages (last 10 messages); only the
+  newest turn carries excerpts, so history stays cheap.
+- Prompts are deliberately general for now; question-specific prompts come
+  later.
+
+#### 6.6.5 Markdown rendering
+
+`MarkdownText` (DesignSystem/) parses replies into blocks with a small
+`MarkdownParser` — headings, paragraphs, bullet and numbered lists (nested by
+indent), blockquotes, fenced code, tables, dividers — and styles each block's
+inline text (bold, italic, code, links, strikethrough) with Foundation's
+`AttributedString(markdown:)`. No third-party dependency. Replies are
+text-selectable. A reply the model wrapped in a ```markdown fence is unwrapped
+before display.
 
 ---
 
 ## 7. Persistence & caching
 
-- **SwiftData schema**: `Book`, `AppSettings`, `ChapterSummary`,
-  `EntityProfile`, `SavedQuote` as `@Model` types; everything else in §2 is an
-  embedded `Codable` struct. `ModelContainer` assembled once in `App/` at
-  launch.
+- **SwiftData schema**: `Book`, `AppSettings`, `SavedQuote`,
+  `BookCollection`, `CollectionEntry` as `@Model` types, listed once in
+  `AppSchema.models` (used by the app, previews and tests); everything else in
+  §2 is an embedded `Codable` struct.
 - **Book files**: `<Application Support>/Books/<uuid>.epub` +
   `<uuid>-cover.jpg` (§5.3) — included in default iCloud backup, not exposed
   via Files app.
@@ -763,10 +814,14 @@ Both are extra BTR options, shown only when their `AIFeatureKey`
   phase-1/2 spikes — sub-second for a full novel), so the added complexity of
   a resource-level on-disk cache isn't justified yet. Revisit only if a real
   (large) book proves this wrong.
-- **Schema migrations**: not a concern yet — the schema is expected to churn
-  during initial build-out. Adopt `VersionedSchema`/`SchemaMigrationPlan`
-  once the app has real user data worth preserving across schema changes, not
-  before.
+- **Schema migrations**: still SwiftData's automatic lightweight migration
+  (adding/removing models and optional or defaulted properties). The
+  2026-11-04 change — dropping `ChapterSummary`/`EntityProfile`/
+  `ComprehensionCheck`, adding collections — was verified by installing over a
+  store written by the previous build. Codable enums inside stored values are
+  the sharp edge: a removed case makes old rows fail to decode, so retired raw
+  values stay decodable (§2.5's legacy keys). Adopt
+  `VersionedSchema`/`SchemaMigrationPlan` once a change needs more than that.
 
 ---
 
@@ -804,10 +859,15 @@ explicitly rather than decided silently:
   confirmed. Offline, zero new dependency, consistent with the app's
   local-first stance. Known limitation: obscure/archaic words in older
   public-domain texts may not resolve — acceptable for MVP.
-- **BTR entity-lookup "agent"**: a deterministic two-step pipeline (search →
-  one AI call), not a tool-calling LLM agent loop — decided, confirmed.
-  Predictable cost/latency; revisit only if the fixed pipeline proves too
-  rigid in practice.
+- **BTR chat context "agent"**: a fixed pipeline, not a tool-calling LLM loop
+  — send all readable text when it fits; otherwise one planning call for
+  search terms, then local keyword retrieval (§6.6.3). Predictable
+  cost/latency and spoiler-safe by construction (the model never chooses what
+  text it may see). Revisit with embeddings or tool calls only if keyword
+  retrieval proves too weak on long series.
+- **Markdown rendering**: in-house block parser + `AttributedString` for
+  inline styling, over a package like MarkdownUI — small, testable, and covers
+  what chat replies use.
 
 ## 10. Other decisions made by judgment call (flagged for visibility, not blocking)
 
@@ -819,22 +879,18 @@ explicitly rather than decided silently:
   size.
 - **`BookSettingsOverride`/`ReaderTheme` are embedded structs, not
   `@Relationship` models** (§2.1): they're inherently 1:1 with their owning
-  `Book` and never queried independently, unlike `ChapterSummary`/
-  `EntityProfile`/`SavedQuote`, which are true collections.
-- **"Chapter" == Readium spine item/resource**, not a table-of-contents
-  entry, for both `ChapterSummary` and the entity-extraction context window
-  (§6.6.3, §6.6.4). TOC entries and spine items aren't always 1:1, but
-  aligning to the spine is far simpler to implement against
-  (`publication.readingOrder`) and close enough for MVP.
-- **`ChapterSummary` staleness** is based on comparing the reader's current
-  progression to the summary's stored `sourceEndLocatorJSON` — regenerate if
-  they've read further into the chapter since the summary was made, otherwise
-  reuse. Not specified in the brief; this is the most literal reading of
-  "also save these" that still keeps a summary honest about what it covers.
-- **Entity-extraction context window is resource-clamped**: if the ±100-word
-  window would cross a chapter/resource boundary, it's simply shorter near
-  the edges rather than pulling words from an adjacent `WordStream`. Simpler,
-  and edge cases here are rare relative to how often the feature fires.
+  `Book` and never queried independently, unlike `SavedQuote`/
+  `CollectionEntry`, which are true collections.
+- **"Chapter" == Readium spine item/resource** for text extraction; the BTR
+  chat labels passages with the TOC title for that resource where one exists
+  (resources missing from the TOC inherit the previous title).
+- **The BTR chat's passage strip is resource-clamped**: near the start or end
+  of a resource it's simply shorter rather than pulling words from an
+  adjacent `WordStream`.
+- **Collections are many-to-many** (a book can be in a series and a broader
+  "universe" collection at once), and a book in a collection still shows in
+  the library on its own — collections are views onto the library, like
+  playlists, not folders.
 - **Guided Reading's pacing unit is `wordsPerMinute`**, mirroring RSVP,
   rather than a separate "lines per minute" concept — one mental model for
   speed across both timed modes.
