@@ -596,7 +596,7 @@ constructs, unlike Guided Reading.
   `NormalModeSettings.layout` — no custom logic needed.
 - Toolbar trigger is "tap the top of the screen" (design-roadmap.md §6.5),
   via `VisualNavigatorDelegate.navigator(_:didTapAt:)` checked against a
-  fixed top zone (80pt) — the one part of this mode that wasn't quite as
+  fixed top zone (140pt) — the one part of this mode that wasn't quite as
   simple as expected:
   - **Found via UI test, not assumed**: a tap in roughly the top ~2% of the
     screen (~18pt) never reaches `didTapAt` at all — confirmed by temporarily
@@ -605,7 +605,7 @@ constructs, unlike Guided Reading.
     likely the status bar/Dynamic Island's own touch handling intercepting a
     *synthesized* XCUITest tap specifically (not necessarily a real-finger
     issue) — but the test taps a safer point further down, still well inside
-    the 80pt zone, either way.
+    the 140pt zone, either way.
   - **Hiding the toolbar isn't a second top-tap.** Once visible, the
     navigation bar physically occupies that same top zone and intercepts the
     tap before it ever reaches the WebView — confirmed the same way (zero

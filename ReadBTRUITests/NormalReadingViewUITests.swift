@@ -40,11 +40,11 @@ final class NormalReadingViewUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2.0)
         attach(app, name: "normal-reading-content")
 
-        // Tap inside the navigator's 80pt top zone, but not right at the
+        // Tap inside the navigator's 140pt top zone, but not right at the
         // very edge — a tap in the top few points overlaps the status
         // bar/Dynamic Island's own touch-interception zone (confirmed
         // empirically: a tap at 2% down never reached `didTapAt` at all;
-        // one safely below that, still well inside the 80pt zone, does).
+        // one safely below that, still well inside the 140pt zone, does).
         // Anchored off the *app's* coordinate space, not the navigator
         // element's own — a `UIViewControllerRepresentable`-hosted
         // element's own frame isn't reliably reported to the accessibility

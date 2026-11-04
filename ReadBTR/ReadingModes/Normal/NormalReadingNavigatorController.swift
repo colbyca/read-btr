@@ -17,10 +17,11 @@ final class NormalReadingNavigatorController: UIViewController {
     /// scrolling/page-turning, a programmatic `go(to:)`, or initial load.
     var onLocationChange: ((Locator) -> Void)?
 
-    /// Fired on a tap landing in the top strip of the screen — the one
-    /// mode-specific toolbar trigger design-roadmap.md §6.5 calls for:
-    /// "a tap at the top of the screen, not anywhere on the page."
-    var onTopTap: (() -> Void)?
+    /// Fired on every tap on the page, reporting whether it landed in the
+    /// top strip of the screen — the one mode-specific toolbar trigger
+    /// design-roadmap.md §6.5 calls for ("a tap at the top of the screen,
+    /// not anywhere on the page"). A tap anywhere else hides the toolbar.
+    var onTap: ((_ isInTopZone: Bool) -> Void)?
 
     /// Fired when the reader taps "BTR" in the native text-selection edit
     /// menu (design-roadmap.md §6.6.1: "native WebView text selection,
@@ -35,8 +36,9 @@ final class NormalReadingNavigatorController: UIViewController {
     var onSaveQuoteRequested: ((Selection) -> Void)?
 
     /// Height of the tap-to-reveal-toolbar zone, in points, measured from
-    /// the top of the navigator's own view.
-    private static let topTapZoneHeight: CGFloat = 80
+    /// the top of the navigator's own view. The view runs under the status
+    /// bar, so roughly the first 60pt of this sits behind it.
+    static let topTapZoneHeight: CGFloat = 140
 
     /// `includesCustomActions` controls the "Save Quote" and "BTR" entries
     /// appended to the native selection edit menu. `false` only for the read-only preview pane `BTRMenuViewModel.preparePreview()`
@@ -139,8 +141,7 @@ extension NormalReadingNavigatorController: EPUBNavigatorDelegate {
     }
 
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
-        guard point.y <= Self.topTapZoneHeight else { return }
-        onTopTap?()
+        onTap?(point.y <= Self.topTapZoneHeight)
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {

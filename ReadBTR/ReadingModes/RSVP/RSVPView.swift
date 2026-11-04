@@ -117,7 +117,7 @@ private struct RSVPContentView: View {
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    viewModel.showToolbar()
+                    viewModel.toggleToolbar()
                 }
                 .accessibilityIdentifier("rsvp-background")
 

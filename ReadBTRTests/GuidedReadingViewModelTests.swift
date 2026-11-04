@@ -234,6 +234,18 @@ struct GuidedReadingViewModelTests {
         #expect(viewModel.isPlaying == false)
     }
 
+    @Test func toggleToolbarShowsThenHides() async throws {
+        let (viewModel, _, cleanup) = try await Self.makeLoadedViewModel()
+        defer { cleanup() }
+
+        viewModel.toggleToolbar()
+        #expect(viewModel.isShowingToolbar == true)
+
+        viewModel.toggleToolbar()
+        #expect(viewModel.isShowingToolbar == false)
+        #expect(viewModel.isPlaying == false)
+    }
+
     @Test func showToolbarPausesEvenIfAlreadyPaused() async throws {
         let (viewModel, _, cleanup) = try await Self.makeLoadedViewModel()
         defer { cleanup() }
