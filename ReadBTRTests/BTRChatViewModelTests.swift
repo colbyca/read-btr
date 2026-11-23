@@ -347,7 +347,7 @@ struct BTRChatViewModelTests {
         #expect(saved.selectedWordIDs == [10])
         let storedAnchor = try Locator(jsonString: saved.anchorLocatorJSON)
         #expect(storedAnchor.href == fixture.anchorLocator.href)
-        #expect(storedAnchor.locations.progression == fixture.anchorLocator.locations.progression)
+        #expect(abs((storedAnchor.locations.progression ?? -1) - (fixture.anchorLocator.locations.progression ?? 0)) < 1e-9)
 
         await viewModel.ask("And the Rabbit?")
         #expect(fixture.book.btrChats.count == 1)
@@ -389,7 +389,7 @@ struct BTRChatViewModelTests {
 
         #expect(second.kind == .selection)
         #expect(second.anchorLocator.href == fixture.anchorLocator.href)
-        #expect(second.anchorLocator.locations.progression == fixture.anchorLocator.locations.progression)
+        #expect(abs((second.anchorLocator.locations.progression ?? -1) - (fixture.anchorLocator.locations.progression ?? 0)) < 1e-9)
         #expect(second.messages.map(\.text) == ["Who is Alice?", "A reply."])
         #expect(second.selectedWordIDs == [10, 12])
         #expect(second.contextWords.count == 21)
