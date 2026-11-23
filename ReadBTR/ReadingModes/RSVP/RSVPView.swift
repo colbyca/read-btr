@@ -50,6 +50,9 @@ private struct RSVPReadingScreen: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)
                     .toolbar {
+                        ToolbarItem(placement: .principal) {
+                            ReaderChapterHeader(title: viewModel.currentChapterTitle, progress: viewModel.currentChapterProgress)
+                        }
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
                                 dismiss()

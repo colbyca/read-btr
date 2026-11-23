@@ -81,6 +81,22 @@ final class GuidedReadingViewModel {
     /// round-trip notes apply the same caution here).
     private var currentResourceHref = ""
 
+    /// Resource → chapter title, built once the publication opens.
+    private(set) var chapterTitles: ChapterTitleIndex?
+
+    /// The current chapter's title for the toolbar — falls back to the
+    /// book's own title for resources before the first TOC entry.
+    var currentChapterTitle: String {
+        chapterTitles?.title(forResourceHref: currentResourceHref) ?? book.title
+    }
+
+    /// How far through the current chapter (resource) the highlighted
+    /// line is, 0...1.
+    var currentChapterProgress: Double {
+        guard lineCount > 0, currentLineIndex >= 0 else { return 0 }
+        return min(Double(currentLineIndex + 1) / Double(lineCount), 1)
+    }
+
     /// How many times `load()`/`advance()` will poll for the WebView to
     /// finish laying out a freshly-navigated resource before giving up —
     /// there's no officially exposed "content ready" signal
@@ -113,6 +129,7 @@ final class GuidedReadingViewModel {
             let fileURL = try fileStorage.absoluteURL(forRelativePath: book.relativeFilePath)
             let publication = try await publicationLoader.open(fileURL: fileURL)
             self.publication = publication
+            chapterTitles = await ChapterTitleIndex.make(for: publication)
 
             guard let initialLocator = await firstReadableLocator(in: publication) else {
                 // No navigator exists yet at this point, so there's no

@@ -78,6 +78,22 @@ final class RSVPViewModel {
         self.publicationLoader = publicationLoader
     }
 
+    /// Resource → chapter title, built once the publication opens.
+    private(set) var chapterTitles: ChapterTitleIndex?
+
+    /// The current chapter's title for the toolbar — falls back to the
+    /// book's own title for resources before the first TOC entry.
+    var currentChapterTitle: String {
+        currentStream.flatMap { chapterTitles?.title(forResourceHref: $0.resourceHref) } ?? book.title
+    }
+
+    /// How far through the current chapter (resource) the current word
+    /// is, 0...1.
+    var currentChapterProgress: Double {
+        guard let currentStream, !currentStream.words.isEmpty else { return 0 }
+        return min(Double(currentIndex + 1) / Double(currentStream.words.count), 1)
+    }
+
     var currentWord: String? {
         wordSegment(at: currentIndex)?.text
     }
@@ -105,6 +121,7 @@ final class RSVPViewModel {
             let fileURL = try fileStorage.absoluteURL(forRelativePath: book.relativeFilePath)
             let publication = try await publicationLoader.open(fileURL: fileURL)
             self.publication = publication
+            chapterTitles = await ChapterTitleIndex.make(for: publication)
 
             guard let resolved = await book.currentRSVPIndex(publication: publication, cache: wordStreamCache) else {
                 loadState = .failed("Couldn't find a starting position in this book.")

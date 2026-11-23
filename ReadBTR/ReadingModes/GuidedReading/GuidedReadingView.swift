@@ -61,6 +61,11 @@ private struct GuidedReadingScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(toolbarIsVisible ? .visible : .hidden, for: .navigationBar)
             .toolbar {
+                if viewModel.loadState == .ready {
+                    ToolbarItem(placement: .principal) {
+                        ReaderChapterHeader(title: viewModel.currentChapterTitle, progress: viewModel.currentChapterProgress)
+                    }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         dismiss()
