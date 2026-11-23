@@ -47,9 +47,18 @@ private struct RSVPReadingScreen: View {
         case .ready:
             NavigationStack {
                 RSVPContentView(viewModel: viewModel)
+                    .readerControlStack(
+                        isVisible: viewModel.isShowingToolbar,
+                        identifierPrefix: "rsvp",
+                        onChapterSelect: { viewModel.isShowingChapterSelect = true },
+                        onSettings: { viewModel.isShowingSettings = true }
+                    )
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)
                     .toolbar {
+                        ToolbarItem(placement: .principal) {
+                            ReaderChapterHeader(title: viewModel.currentChapterTitle, progress: viewModel.currentChapterProgress)
+                        }
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
                                 dismiss()
@@ -57,22 +66,6 @@ private struct RSVPReadingScreen: View {
                                 Image(systemName: "xmark")
                             }
                             .accessibilityIdentifier("rsvp-exit")
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                viewModel.isShowingChapterSelect = true
-                            } label: {
-                                Image(systemName: "list.bullet")
-                            }
-                            .accessibilityIdentifier("rsvp-chapter-select")
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                viewModel.isShowingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityIdentifier("rsvp-settings")
                         }
                     }
                     .sheet(isPresented: $viewModel.isShowingChapterSelect) {

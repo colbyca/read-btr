@@ -29,6 +29,25 @@ final class NormalReadingViewModel {
     private(set) var publication: Publication?
 
     var isShowingToolbar = false
+
+    /// The navigator's latest reported position.
+    private(set) var currentLocator: Locator?
+
+    /// Resource → chapter title, built once the publication opens.
+    private(set) var chapterTitles: ChapterTitleIndex?
+
+    /// The current chapter's title for the toolbar — falls back to the
+    /// book's own title for resources before the first TOC entry.
+    var currentChapterTitle: String {
+        currentLocator.flatMap { chapterTitles?.title(forResourceHref: $0.href.string) } ?? book.title
+    }
+
+    /// How far through the current chapter (resource) the reader is, 0...1
+    /// — Readium's own in-resource progression, for both the scrolling and
+    /// paginated layouts.
+    var currentChapterProgress: Double {
+        min(max(currentLocator?.locations.progression ?? 0, 0), 1)
+    }
     var isShowingChapterSelect = false
     var isShowingSettings = false
 
@@ -90,6 +109,8 @@ final class NormalReadingViewModel {
             let fileURL = try fileStorage.absoluteURL(forRelativePath: book.relativeFilePath)
             let publication = try await publicationLoader.open(fileURL: fileURL)
             self.publication = publication
+            chapterTitles = await ChapterTitleIndex.make(for: publication)
+            currentLocator = book.currentLocator
 
             let host = try NormalReadingNavigatorController(
                 publication: publication,
@@ -111,12 +132,11 @@ final class NormalReadingViewModel {
     private func wireNavigatorCallbacks(_ host: NormalReadingNavigatorController) {
         host.onLocationChange = { [weak self] locator in
             Task { @MainActor [weak self] in
+                self?.currentLocator = locator
                 self?.persistPosition(from: locator)
-                // Scrolling/turning a page while reading is the natural
-                // "I'm reading again" signal, so it hides the toolbar the
-                // same way resuming playback does in RSVP/Guided Reading
-                // (a plain tap on the page hides it too — see `handleTap`).
-                self?.isShowingToolbar = false
+                // The toolbar deliberately stays up while scrolling or
+                // turning pages, so its chapter progress bar follows along;
+                // a plain tap on the page hides it (see `handleTap`).
             }
         }
         host.onTap = { [weak self] isInTopZone in

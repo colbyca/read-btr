@@ -60,9 +60,18 @@ private struct NormalReadingScreen: View {
                     NormalReadingNavigatorRepresentable(host: host)
                         .ignoresSafeArea()
                         .accessibilityIdentifier("normal-reading-navigator")
+                        .readerControlStack(
+                            isVisible: viewModel.isShowingToolbar,
+                            identifierPrefix: "normal-reading",
+                            onChapterSelect: { viewModel.isShowingChapterSelect = true },
+                            onSettings: { viewModel.isShowingSettings = true }
+                        )
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)
                         .toolbar {
+                            ToolbarItem(placement: .principal) {
+                                ReaderChapterHeader(title: viewModel.currentChapterTitle, progress: viewModel.currentChapterProgress)
+                            }
                             ToolbarItem(placement: .topBarLeading) {
                                 Button {
                                     dismiss()
@@ -70,22 +79,6 @@ private struct NormalReadingScreen: View {
                                     Image(systemName: "xmark")
                                 }
                                 .accessibilityIdentifier("normal-reading-exit")
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button {
-                                    viewModel.isShowingChapterSelect = true
-                                } label: {
-                                    Image(systemName: "list.bullet")
-                                }
-                                .accessibilityIdentifier("normal-reading-chapter-select")
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button {
-                                    viewModel.isShowingSettings = true
-                                } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                                .accessibilityIdentifier("normal-reading-settings")
                             }
                         }
                         .sheet(isPresented: $viewModel.isShowingChapterSelect) {

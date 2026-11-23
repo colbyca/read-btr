@@ -58,9 +58,20 @@ private struct GuidedReadingScreen: View {
                     ProgressView()
                 }
             }
+            .readerControlStack(
+                isVisible: toolbarIsVisible && viewModel.navigatorHost != nil,
+                identifierPrefix: "guided-reading",
+                onChapterSelect: { viewModel.isShowingChapterSelect = true },
+                onSettings: { viewModel.isShowingSettings = true }
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(toolbarIsVisible ? .visible : .hidden, for: .navigationBar)
             .toolbar {
+                if viewModel.loadState == .ready {
+                    ToolbarItem(placement: .principal) {
+                        ReaderChapterHeader(title: viewModel.currentChapterTitle, progress: viewModel.currentChapterProgress)
+                    }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         dismiss()
@@ -68,24 +79,6 @@ private struct GuidedReadingScreen: View {
                         Image(systemName: "xmark")
                     }
                     .accessibilityIdentifier("guided-reading-exit")
-                }
-                if viewModel.navigatorHost != nil {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            viewModel.isShowingChapterSelect = true
-                        } label: {
-                            Image(systemName: "list.bullet")
-                        }
-                        .accessibilityIdentifier("guided-reading-chapter-select")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            viewModel.isShowingSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
-                        .accessibilityIdentifier("guided-reading-settings")
-                    }
                 }
             }
             .sheet(isPresented: $viewModel.isShowingChapterSelect) {
