@@ -60,6 +60,12 @@ private struct NormalReadingScreen: View {
                     NormalReadingNavigatorRepresentable(host: host)
                         .ignoresSafeArea()
                         .accessibilityIdentifier("normal-reading-navigator")
+                        .readerControlStack(
+                            isVisible: viewModel.isShowingToolbar,
+                            identifierPrefix: "normal-reading",
+                            onChapterSelect: { viewModel.isShowingChapterSelect = true },
+                            onSettings: { viewModel.isShowingSettings = true }
+                        )
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)
                         .toolbar {
@@ -73,25 +79,6 @@ private struct NormalReadingScreen: View {
                                     Image(systemName: "xmark")
                                 }
                                 .accessibilityIdentifier("normal-reading-exit")
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
-                                // Stacked so the leading and trailing sides are the same width,
-                                // keeping the chapter header centered between them.
-                                VStack(spacing: 2) {
-                                    Button {
-                                        viewModel.isShowingChapterSelect = true
-                                    } label: {
-                                        Image(systemName: "list.bullet")
-                                    }
-                                    .accessibilityIdentifier("normal-reading-chapter-select")
-                                    Button {
-                                        viewModel.isShowingSettings = true
-                                    } label: {
-                                        Image(systemName: "gearshape")
-                                    }
-                                    .accessibilityIdentifier("normal-reading-settings")
-                                }
-                                .imageScale(.small)
                             }
                         }
                         .sheet(isPresented: $viewModel.isShowingChapterSelect) {

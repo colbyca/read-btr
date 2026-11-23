@@ -47,6 +47,12 @@ private struct RSVPReadingScreen: View {
         case .ready:
             NavigationStack {
                 RSVPContentView(viewModel: viewModel)
+                    .readerControlStack(
+                        isVisible: viewModel.isShowingToolbar,
+                        identifierPrefix: "rsvp",
+                        onChapterSelect: { viewModel.isShowingChapterSelect = true },
+                        onSettings: { viewModel.isShowingSettings = true }
+                    )
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)
                     .toolbar {
@@ -60,25 +66,6 @@ private struct RSVPReadingScreen: View {
                                 Image(systemName: "xmark")
                             }
                             .accessibilityIdentifier("rsvp-exit")
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            // Stacked so the leading and trailing sides are the same width,
-                            // keeping the chapter header centered between them.
-                            VStack(spacing: 2) {
-                                Button {
-                                    viewModel.isShowingChapterSelect = true
-                                } label: {
-                                    Image(systemName: "list.bullet")
-                                }
-                                .accessibilityIdentifier("rsvp-chapter-select")
-                                Button {
-                                    viewModel.isShowingSettings = true
-                                } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                                .accessibilityIdentifier("rsvp-settings")
-                            }
-                            .imageScale(.small)
                         }
                     }
                     .sheet(isPresented: $viewModel.isShowingChapterSelect) {

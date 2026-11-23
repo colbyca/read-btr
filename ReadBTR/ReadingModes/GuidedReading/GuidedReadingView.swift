@@ -58,6 +58,12 @@ private struct GuidedReadingScreen: View {
                     ProgressView()
                 }
             }
+            .readerControlStack(
+                isVisible: toolbarIsVisible && viewModel.navigatorHost != nil,
+                identifierPrefix: "guided-reading",
+                onChapterSelect: { viewModel.isShowingChapterSelect = true },
+                onSettings: { viewModel.isShowingSettings = true }
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(toolbarIsVisible ? .visible : .hidden, for: .navigationBar)
             .toolbar {
@@ -73,27 +79,6 @@ private struct GuidedReadingScreen: View {
                         Image(systemName: "xmark")
                     }
                     .accessibilityIdentifier("guided-reading-exit")
-                }
-                if viewModel.navigatorHost != nil {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        // Stacked so the leading and trailing sides are the same width,
-                        // keeping the chapter header centered between them.
-                        VStack(spacing: 2) {
-                            Button {
-                                viewModel.isShowingChapterSelect = true
-                            } label: {
-                                Image(systemName: "list.bullet")
-                            }
-                            .accessibilityIdentifier("guided-reading-chapter-select")
-                            Button {
-                                viewModel.isShowingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityIdentifier("guided-reading-settings")
-                        }
-                        .imageScale(.small)
-                    }
                 }
             }
             .sheet(isPresented: $viewModel.isShowingChapterSelect) {
