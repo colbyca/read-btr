@@ -14,6 +14,7 @@ struct ReaderChapterHeader: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .minimumScaleFactor(0.85)
                 .accessibilityIdentifier("reader-chapter-title")
             ProgressView(value: min(max(progress, 0), 1))
                 .progressViewStyle(.linear)
@@ -21,6 +22,8 @@ struct ReaderChapterHeader: View {
                 .accessibilityLabel("Chapter progress")
                 .accessibilityValue(Text("\(Int((min(max(progress, 0), 1) * 100).rounded())) percent"))
         }
-        .frame(width: 180)
+        // Takes whatever room the toolbar leaves between its leading and
+        // trailing buttons, so full chapter titles fit where they can.
+        .frame(minWidth: 180, maxWidth: .infinity)
     }
 }
