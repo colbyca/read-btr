@@ -134,11 +134,9 @@ final class NormalReadingViewModel {
             Task { @MainActor [weak self] in
                 self?.currentLocator = locator
                 self?.persistPosition(from: locator)
-                // Scrolling/turning a page while reading is the natural
-                // "I'm reading again" signal, so it hides the toolbar the
-                // same way resuming playback does in RSVP/Guided Reading
-                // (a plain tap on the page hides it too — see `handleTap`).
-                self?.isShowingToolbar = false
+                // The toolbar deliberately stays up while scrolling or
+                // turning pages, so its chapter progress bar follows along;
+                // a plain tap on the page hides it (see `handleTap`).
             }
         }
         host.onTap = { [weak self] isInTopZone in

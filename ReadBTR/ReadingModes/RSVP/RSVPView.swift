@@ -62,20 +62,23 @@ private struct RSVPReadingScreen: View {
                             .accessibilityIdentifier("rsvp-exit")
                         }
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                viewModel.isShowingChapterSelect = true
-                            } label: {
-                                Image(systemName: "list.bullet")
+                            // Stacked so the leading and trailing sides are the same width,
+                            // keeping the chapter header centered between them.
+                            VStack(spacing: 2) {
+                                Button {
+                                    viewModel.isShowingChapterSelect = true
+                                } label: {
+                                    Image(systemName: "list.bullet")
+                                }
+                                .accessibilityIdentifier("rsvp-chapter-select")
+                                Button {
+                                    viewModel.isShowingSettings = true
+                                } label: {
+                                    Image(systemName: "gearshape")
+                                }
+                                .accessibilityIdentifier("rsvp-settings")
                             }
-                            .accessibilityIdentifier("rsvp-chapter-select")
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                viewModel.isShowingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityIdentifier("rsvp-settings")
+                            .imageScale(.small)
                         }
                     }
                     .sheet(isPresented: $viewModel.isShowingChapterSelect) {

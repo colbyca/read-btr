@@ -76,20 +76,23 @@ private struct GuidedReadingScreen: View {
                 }
                 if viewModel.navigatorHost != nil {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            viewModel.isShowingChapterSelect = true
-                        } label: {
-                            Image(systemName: "list.bullet")
+                        // Stacked so the leading and trailing sides are the same width,
+                        // keeping the chapter header centered between them.
+                        VStack(spacing: 2) {
+                            Button {
+                                viewModel.isShowingChapterSelect = true
+                            } label: {
+                                Image(systemName: "list.bullet")
+                            }
+                            .accessibilityIdentifier("guided-reading-chapter-select")
+                            Button {
+                                viewModel.isShowingSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                            .accessibilityIdentifier("guided-reading-settings")
                         }
-                        .accessibilityIdentifier("guided-reading-chapter-select")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            viewModel.isShowingSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
-                        .accessibilityIdentifier("guided-reading-settings")
+                        .imageScale(.small)
                     }
                 }
             }

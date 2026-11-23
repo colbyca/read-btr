@@ -75,20 +75,23 @@ private struct NormalReadingScreen: View {
                                 .accessibilityIdentifier("normal-reading-exit")
                             }
                             ToolbarItem(placement: .topBarTrailing) {
-                                Button {
-                                    viewModel.isShowingChapterSelect = true
-                                } label: {
-                                    Image(systemName: "list.bullet")
+                                // Stacked so the leading and trailing sides are the same width,
+                                // keeping the chapter header centered between them.
+                                VStack(spacing: 2) {
+                                    Button {
+                                        viewModel.isShowingChapterSelect = true
+                                    } label: {
+                                        Image(systemName: "list.bullet")
+                                    }
+                                    .accessibilityIdentifier("normal-reading-chapter-select")
+                                    Button {
+                                        viewModel.isShowingSettings = true
+                                    } label: {
+                                        Image(systemName: "gearshape")
+                                    }
+                                    .accessibilityIdentifier("normal-reading-settings")
                                 }
-                                .accessibilityIdentifier("normal-reading-chapter-select")
-                            }
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button {
-                                    viewModel.isShowingSettings = true
-                                } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                                .accessibilityIdentifier("normal-reading-settings")
+                                .imageScale(.small)
                             }
                         }
                         .sheet(isPresented: $viewModel.isShowingChapterSelect) {
