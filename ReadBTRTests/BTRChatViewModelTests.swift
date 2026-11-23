@@ -292,4 +292,126 @@ struct BTRChatViewModelTests {
             #expect(turn.contains(ending))
         }
     }
+
+    // MARK: - Page chats
+
+    @Test func pageLocatorMovesToThePageEndAndDropsText() throws {
+        let fixture = try BTRChatPageFixture.locator(progression: 0.4)
+        let end = VisiblePageLocator.pageLocator(from: fixture, endProgression: 0.55)
+        #expect(end.locations.progression == 0.55)
+        #expect(end.text.highlight == nil)
+        #expect(end.href == fixture.href)
+        // Never moves backward, and never past the resource's end.
+        #expect(VisiblePageLocator.pageLocator(from: fixture, endProgression: 0.1).locations.progression == 0.4)
+        #expect(VisiblePageLocator.pageLocator(from: fixture, endProgression: 3).locations.progression == 1)
+        #expect(VisiblePageLocator.pageLocator(from: fixture, endProgression: nil).locations.progression == 0.4)
+    }
+
+    @Test func aPageChatHasNoPassageAndTellsTheModelItCameFromThePage() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+
+        let provider = MockAIProvider()
+        let anchor = VisiblePageLocator.pageLocator(from: fixture.anchorLocator, endProgression: nil)
+        let viewModel = BTRChatViewModel(
+            book: fixture.book, publication: fixture.publication, anchorLocator: anchor, kind: .page,
+            chapterTitle: "Down the Rabbit-Hole", provider: provider, modelContext: fixture.context,
+            earlierBooks: [], fileStorage: fixture.storage)
+        await viewModel.loadContextWords()
+        #expect(viewModel.contextWords.isEmpty)
+        #expect(viewModel.focus == nil)
+
+        await viewModel.ask("What's happening on this page?")
+        let turn = try #require(provider.chatsReceived.first?.messages.last?.text)
+        #expect(turn.contains("opened this chat from the page they are on"))
+        #expect(!turn.contains("from this passage"))
+        #expect(turn.contains("current book, from the start up to the reader's position"))
+    }
+
+    // MARK: - Saving
+
+    @Test func aChatIsSavedOnceAQuestionIsAsked() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+
+        let viewModel = fixture.makeViewModel(provider: MockAIProvider())
+        await viewModel.loadContextWords()
+        #expect(fixture.book.btrChats.isEmpty)
+
+        await viewModel.ask("Who is Alice?")
+        let saved = try #require(viewModel.savedChat)
+        #expect(fixture.book.btrChats.count == 1)
+        #expect(saved.kind == .selection)
+        #expect(saved.title == "Who is Alice?")
+        #expect(saved.messages.map(\.text) == ["Who is Alice?", "A reply."])
+        #expect(saved.selectedWordIDs == [10])
+        let storedAnchor = try Locator(jsonString: saved.anchorLocatorJSON)
+        #expect(storedAnchor.href == fixture.anchorLocator.href)
+        #expect(storedAnchor.locations.progression == fixture.anchorLocator.locations.progression)
+
+        await viewModel.ask("And the Rabbit?")
+        #expect(fixture.book.btrChats.count == 1)
+        #expect(saved.questionCount == 2)
+        #expect(viewModel.savedChats.first?.id == saved.id)
+    }
+
+    @Test func failedRepliesAreLeftOutOfTheSavedChat() {
+        let messages = [
+            BTRChatMessage(role: .reader, text: "One"),
+            BTRChatMessage(role: .assistant, text: "Reply"),
+            BTRChatMessage(role: .reader, text: "Two"),
+            BTRChatMessage(role: .assistant, text: "", state: .failed("Nope")),
+            BTRChatMessage(role: .reader, text: "Three"),
+            BTRChatMessage(role: .assistant, text: "", state: .pending("Thinking…")),
+        ]
+        let stored = BTRChatViewModel.storedMessages(from: messages)
+        #expect(stored.map(\.text) == ["One", "Reply", "Two", "Three"])
+    }
+
+    @Test func aSavedChatReopensWithItsConversationAndCanContinue() async throws {
+        let fixture = try await Self.makeFixture()
+        defer { fixture.cleanup() }
+
+        let provider = MockAIProvider()
+        let first = fixture.makeViewModel(provider: provider)
+        await first.loadContextWords()
+        first.toggleWord(first.contextWords[12])
+        await first.ask("Who is Alice?")
+        let saved = try #require(first.savedChat)
+
+        // A fresh page chat elsewhere, then reopen the first one in it.
+        let pageAnchor = VisiblePageLocator.pageLocator(from: fixture.anchorLocator, endProgression: 1)
+        let second = BTRChatViewModel(
+            book: fixture.book, publication: fixture.publication, anchorLocator: pageAnchor, kind: .page,
+            provider: provider, modelContext: fixture.context, earlierBooks: [], fileStorage: fixture.storage)
+        second.reopen(saved)
+        await second.loadContextWords()
+
+        #expect(second.kind == .selection)
+        #expect(second.anchorLocator.href == fixture.anchorLocator.href)
+        #expect(second.anchorLocator.locations.progression == fixture.anchorLocator.locations.progression)
+        #expect(second.messages.map(\.text) == ["Who is Alice?", "A reply."])
+        #expect(second.selectedWordIDs == [10, 12])
+        #expect(second.contextWords.count == 21)
+
+        provider.textToReturn = "Follow-up."
+        await second.ask("What is she doing?")
+        let followUp = try #require(provider.chatsReceived.last)
+        #expect(followUp.messages.first == AIChatMessage(role: .user, text: "Who is Alice?"))
+        #expect(fixture.book.btrChats.count == 1)
+        #expect(saved.questionCount == 2)
+
+        second.delete(saved)
+        #expect(fixture.book.btrChats.isEmpty)
+        #expect(second.savedChat == nil)
+    }
+}
+
+/// A bare locator for the pure page-locator helper.
+enum BTRChatPageFixture {
+    static func locator(progression: Double) throws -> Locator {
+        try Locator(
+            jsonString: #"{"href":"chapter1.xhtml","type":"application/xhtml+xml","locations":{"progression":\#(progression)},"text":{"highlight":"word"}}"#
+        )
+    }
 }

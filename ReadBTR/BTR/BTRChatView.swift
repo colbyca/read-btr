@@ -4,7 +4,12 @@ import SwiftUI
 /// BTR entry point, it shows the passage the reader opened it from — the
 /// word(s) they were on plus 10 words either side, each tappable to select
 /// it as the focus of a question — and a chat about the book underneath.
-/// Replies are Markdown, rendered by `MarkdownText`.
+/// Replies are Markdown, rendered by `MarkdownText`. A chat opened from
+/// the reader controls with nothing selected has no passage: its header
+/// says it covers the page and everything before it instead.
+///
+/// The clock button lists this book's saved chats; picking one reopens it
+/// in place, to read or carry on.
 ///
 /// The back arrow just `dismiss()`es; none of the reading modes resume
 /// playback on their own when it closes, so the reader comes back exactly
@@ -13,6 +18,7 @@ struct BTRChatView: View {
     @Bindable var viewModel: BTRChatViewModel
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isInputFocused: Bool
+    @State private var isShowingHistory = false
 
     private static let suggestions = [
         "Summarize this chapter so far",
@@ -41,8 +47,20 @@ struct BTRChatView: View {
                     .accessibilityLabel("Back")
                     .accessibilityIdentifier("btr-chat-back")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingHistory = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .accessibilityLabel("Saved Chats")
+                    .accessibilityIdentifier("btr-chat-history")
+                }
             }
-            .task {
+            .sheet(isPresented: $isShowingHistory) {
+                BTRChatHistoryView(viewModel: viewModel)
+            }
+            .task(id: viewModel.anchorLocator) {
                 await viewModel.loadContextWords()
             }
         }
@@ -52,7 +70,12 @@ struct BTRChatView: View {
 
     private var passageHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if viewModel.contextWords.isEmpty {
+            if viewModel.kind == .page {
+                Text(pageCaption)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("btr-chat-page-scope")
+            } else if viewModel.contextWords.isEmpty {
                 Text(viewModel.book.title)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -75,6 +98,15 @@ struct BTRChatView: View {
         .padding(.horizontal)
         .padding(.vertical, 12)
         .background(Color(.secondarySystemBackground))
+    }
+
+    private var pageCaption: String {
+        var caption = "Chatting about \(viewModel.chapterTitle.map { "“\($0)”" } ?? "this book") up to the end of this page."
+        if !viewModel.earlierBookTitles.isEmpty {
+            let count = viewModel.earlierBookTitles.count
+            caption += " Also drawing on \(count) earlier book\(count == 1 ? "" : "s") in this collection."
+        }
+        return caption
     }
 
     private var passageCaption: String {
@@ -225,5 +257,93 @@ private struct BTRChatBubble: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// This book's saved BTR chats, most recent first. Picking one reopens it
+/// in the chat behind; swiping deletes it.
+private struct BTRChatHistoryView: View {
+    let viewModel: BTRChatViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if viewModel.savedChats.isEmpty {
+                    ContentUnavailableView(
+                        "No Saved Chats",
+                        systemImage: "bubble.left.and.text.bubble.right",
+                        description: Text("Chats are saved here as soon as you ask a question.")
+                    )
+                    .accessibilityIdentifier("btr-chat-history-empty")
+                } else {
+                    List {
+                        ForEach(viewModel.savedChats) { chat in
+                            Button {
+                                viewModel.reopen(chat)
+                                dismiss()
+                            } label: {
+                                BTRChatHistoryRow(chat: chat, isOpen: chat.id == viewModel.savedChat?.id)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.isResponding)
+                            .swipeActions {
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    viewModel.delete(chat)
+                                }
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("btr-chat-history-list")
+                }
+            }
+            .navigationTitle("Saved Chats")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .accessibilityIdentifier("btr-chat-history-done")
+                }
+            }
+        }
+    }
+}
+
+private struct BTRChatHistoryRow: View {
+    let chat: SavedBTRChat
+    let isOpen: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(chat.title)
+                    .font(.body)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if isOpen {
+                    Text("Open")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("btr-chat-history-row")
+    }
+
+    private var subtitle: String {
+        var parts: [String] = []
+        parts.append(chat.kind == .page ? "Page" : "Selection")
+        if let chapter = chat.chapterTitle, !chapter.isEmpty { parts.append(chapter) }
+        let count = chat.questionCount
+        parts.append("\(count) question\(count == 1 ? "" : "s")")
+        parts.append(chat.updatedAt.formatted(.relative(presentation: .named)))
+        return parts.joined(separator: " · ")
     }
 }

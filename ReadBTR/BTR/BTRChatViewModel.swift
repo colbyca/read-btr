@@ -36,15 +36,26 @@ struct BTRChatMessage: Identifiable, Equatable {
 /// in any of its collections.
 ///
 /// `anchorLocator` is the reading position the chat was opened *at*: RSVP's
-/// current word, or Guided/Normal Reading's text selection. It never moves
-/// while the chat is open, so the readable text doesn't either.
+/// current word, Guided/Normal Reading's text selection, or — for a chat
+/// opened from the reader controls with nothing selected (`kind == .page`)
+/// — the end of the page on screen. It never moves while the chat is open,
+/// so the readable text doesn't either.
+///
+/// Every chat with at least one question is saved as a `SavedBTRChat` and
+/// listed in the chat's history, where it can be reopened in place.
 @MainActor
 @Observable
 final class BTRChatViewModel {
     let book: Book
     let publication: Publication
-    let anchorLocator: Locator
+    private(set) var anchorLocator: Locator
+    private(set) var kind: SavedBTRChat.Kind
+    /// The chapter the chat was opened in, shown for a page chat.
+    private(set) var chapterTitle: String?
     let theme: ReaderTheme
+
+    /// The stored copy of this conversation, once it has a question.
+    private(set) var savedChat: SavedBTRChat?
 
     /// The passage at the top of the chat: the anchor word(s) plus up to
     /// 10 words either side.
@@ -73,8 +84,13 @@ final class BTRChatViewModel {
     }
 
     private let provider: AIProvider?
-    private let agent: BTRChatContextAgent
+    private var agent: BTRChatContextAgent
     private let wordStreamCache: WordStreamCache
+    private let modelContext: ModelContext
+    private let fileStorage: BookFileStorage
+    private let earlierBooks: [Book]
+    /// A reopened chat's word selection, applied once its passage loads.
+    @ObservationIgnored private var restoredSelection: Set<Int>?
 
     /// How many earlier messages go along with each new question.
     static let maxHistoryMessages = 10
@@ -83,6 +99,8 @@ final class BTRChatViewModel {
         book: Book,
         publication: Publication,
         anchorLocator: Locator,
+        kind: SavedBTRChat.Kind = .selection,
+        chapterTitle: String? = nil,
         provider: AIProvider?,
         modelContext: ModelContext,
         earlierBooks: [Book]? = nil,
@@ -92,11 +110,16 @@ final class BTRChatViewModel {
         self.book = book
         self.publication = publication
         self.anchorLocator = anchorLocator
+        self.kind = kind
+        self.chapterTitle = chapterTitle
         self.provider = provider
+        self.modelContext = modelContext
+        self.fileStorage = fileStorage
         self.wordStreamCache = wordStreamCache
         theme = book.effectiveTheme(AppSettingsStore.current(in: modelContext))
 
         let earlier = earlierBooks ?? book.earlierBooksInCollections
+        self.earlierBooks = earlier
         earlierBookTitles = earlier.map(\.title)
         agent = BTRChatContextAgent(
             sources: Self.sources(
@@ -109,14 +132,15 @@ final class BTRChatViewModel {
     /// provider + key, the feature flag and any per-book override), so the
     /// reading modes can hide their BTR entry point instead.
     static func make(
-        book: Book, publication: Publication, anchorLocator: Locator, modelContext: ModelContext
+        book: Book, publication: Publication, anchorLocator: Locator, kind: SavedBTRChat.Kind = .selection,
+        chapterTitle: String? = nil, modelContext: ModelContext
     ) -> BTRChatViewModel? {
         let appSettings = AppSettingsStore.current(in: modelContext)
         guard book.isAIFeatureEnabled(.btrChat, appSettings) else { return nil }
         let provider = AIProviderFactory.makeProvider(settings: appSettings, keyStore: AppSettings.keyStore)
         return BTRChatViewModel(
-            book: book, publication: publication, anchorLocator: anchorLocator, provider: provider,
-            modelContext: modelContext)
+            book: book, publication: publication, anchorLocator: anchorLocator, kind: kind,
+            chapterTitle: chapterTitle, provider: provider, modelContext: modelContext)
     }
 
     /// Whether the BTR entry point should be shown at all for `book`.
@@ -152,13 +176,21 @@ final class BTRChatViewModel {
 
     // MARK: - The passage at the top
 
-    /// Builds the passage around the anchor. Safe to call repeatedly.
+    /// Builds the passage around the anchor. Safe to call repeatedly. A
+    /// page chat has no passage: it's about the whole page.
     func loadContextWords() async {
-        guard contextWords.isEmpty,
-            let stream = await wordStreamCache.stream(for: anchorLocator.href.string, in: publication)
+        guard kind == .selection, contextWords.isEmpty else { return }
+        let anchor = anchorLocator
+        guard let stream = await wordStreamCache.stream(for: anchor.href.string, in: publication),
+            anchor == anchorLocator
         else { return }
-        contextWords = BTRContextWords.build(around: anchorLocator, in: stream)
-        selectedWordIDs = Set(contextWords.filter(\.isAnchor).map(\.id))
+        contextWords = BTRContextWords.build(around: anchor, in: stream)
+        if let restoredSelection {
+            selectedWordIDs = restoredSelection.filter { id in contextWords.contains { $0.id == id } }
+            self.restoredSelection = nil
+        } else {
+            selectedWordIDs = Set(contextWords.filter(\.isAnchor).map(\.id))
+        }
     }
 
     func toggleWord(_ word: BTRContextWord) {
@@ -186,7 +218,9 @@ final class BTRChatViewModel {
         messages.append(BTRChatMessage(role: .reader, text: question))
         let reply = BTRChatMessage(role: .assistant, text: "", state: .pending("Thinking…"))
         messages.append(reply)
+        persist()
         await answer(question, history: history, replyID: reply.id)
+        persist()
     }
 
     /// Re-asks the question before a failed reply.
@@ -200,6 +234,7 @@ final class BTRChatViewModel {
         messages[index].state = .pending("Thinking…")
         messages[index].text = ""
         await answer(question, history: history, replyID: message.id)
+        persist()
     }
 
     private func answer(_ question: String, history: [AIChatMessage], replyID: UUID) async {
@@ -222,7 +257,8 @@ final class BTRChatViewModel {
         let systemPrompt = PromptBuilder.chatSystemPrompt(
             currentBookTitle: book.title,
             earlierBookTitles: earlierBookTitles.filter { !context.unavailableTitles.contains($0) })
-        let turn = PromptBuilder.chatTurn(question: question, focus: focus, excerpts: context.excerpts)
+        let turn = PromptBuilder.chatTurn(
+            question: question, focus: focus, excerpts: context.excerpts, openedFromPage: kind == .page)
 
         do {
             let text = try await provider.generateChatReply(
@@ -268,6 +304,79 @@ final class BTRChatViewModel {
             break
         }
         return trimmed
+    }
+
+    // MARK: - Saving and reopening
+
+    /// This book's saved chats, most recently used first.
+    var savedChats: [SavedBTRChat] {
+        book.btrChats.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Writes the conversation to its `SavedBTRChat`, creating it on the
+    /// first question.
+    func persist() {
+        let stored = Self.storedMessages(from: messages)
+        guard !stored.isEmpty else { return }
+        if let savedChat {
+            savedChat.messages = stored
+            savedChat.selectedWordIDs = selectedWordIDs.sorted()
+            savedChat.updatedAt = .now
+        } else {
+            guard let json = try? anchorLocator.jsonString() else { return }
+            let chat = SavedBTRChat(
+                kind: kind, anchorLocatorJSON: json, chapterTitle: chapterTitle,
+                selectedWordIDs: selectedWordIDs.sorted(), messages: stored, book: book)
+            modelContext.insert(chat)
+            savedChat = chat
+        }
+        try? modelContext.save()
+    }
+
+    /// Swaps this chat for a saved one, in place: its position in the
+    /// book, its passage and word selection, and its conversation, which
+    /// can be continued from where it left off.
+    func reopen(_ chat: SavedBTRChat) {
+        guard chat.id != savedChat?.id, !isResponding,
+            let locator = try? Locator(jsonString: chat.anchorLocatorJSON)
+        else { return }
+        anchorLocator = locator
+        kind = chat.kind
+        chapterTitle = chat.chapterTitle
+        savedChat = chat
+        messages = chat.messages.map { stored in
+            BTRChatMessage(id: stored.id, role: stored.role == .reader ? .reader : .assistant, text: stored.text)
+        }
+        draft = ""
+        contextWords = []
+        selectedWordIDs = []
+        restoredSelection = Set(chat.selectedWordIDs)
+        agent = BTRChatContextAgent(
+            sources: Self.sources(
+                earlierBooks: earlierBooks, currentBook: book, publication: publication, anchorLocator: locator,
+                fileStorage: fileStorage))
+    }
+
+    /// Deletes a saved chat. Deleting the one that's open keeps it on
+    /// screen, but it's no longer saved (until another question is asked).
+    func delete(_ chat: SavedBTRChat) {
+        if chat.id == savedChat?.id { savedChat = nil }
+        modelContext.delete(chat)
+        try? modelContext.save()
+    }
+
+    /// The messages worth keeping: every finished question/answer pair,
+    /// plus a trailing question still waiting on (or missing) its reply.
+    nonisolated static func storedMessages(from messages: [BTRChatMessage]) -> [SavedBTRChat.Message] {
+        messages.compactMap { message in
+            switch message.role {
+            case .reader:
+                return SavedBTRChat.Message(id: message.id, role: .reader, text: message.text)
+            case .assistant:
+                guard message.state == .complete else { return nil }
+                return SavedBTRChat.Message(id: message.id, role: .assistant, text: message.text)
+            }
+        }
     }
 
     static let noProviderMessage = "AI features aren't set up — add a provider and API key in Settings."

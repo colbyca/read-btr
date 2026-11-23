@@ -62,7 +62,9 @@ private struct GuidedReadingScreen: View {
                 isVisible: toolbarIsVisible && viewModel.navigatorHost != nil,
                 identifierPrefix: "guided-reading",
                 onChapterSelect: { viewModel.isShowingChapterSelect = true },
-                onSettings: { viewModel.isShowingSettings = true }
+                onSettings: { viewModel.isShowingSettings = true },
+                onBTRChat: viewModel.isBTRAvailable && viewModel.loadState == .ready
+                    ? { Task { await viewModel.openPageChat() } } : nil
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(toolbarIsVisible ? .visible : .hidden, for: .navigationBar)

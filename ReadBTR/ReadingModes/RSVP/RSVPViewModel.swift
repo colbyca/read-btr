@@ -40,9 +40,17 @@ final class RSVPViewModel {
     var isShowingSurroundingView = false
     var isShowingBTRChat = false {
         didSet {
-            if !isShowingBTRChat { activeBTRChat = nil }
+            if !isShowingBTRChat {
+                activeBTRChat = nil
+                pageChatAnchor = nil
+            }
         }
     }
+
+    /// Set by `openPageChat()`: the end of the page on screen, for a chat
+    /// opened from the reader controls with nothing selected. Takes
+    /// precedence over any selection while the chat is up.
+    @ObservationIgnored private var pageChatAnchor: Locator?
 
     /// The open chat, kept for as long as it's shown: the full-screen
     /// cover's content closure can be re-evaluated while it's up, and must
@@ -229,11 +237,32 @@ final class RSVPViewModel {
     /// that ordering.
     func makeBTRChatViewModel() -> BTRChatViewModel? {
         if let activeBTRChat { return activeBTRChat }
-        guard let publication, let locator = currentWordLocator else { return nil }
-        let chat = BTRChatViewModel.make(
-            book: book, publication: publication, anchorLocator: locator, modelContext: modelContext)
+        guard let publication else { return nil }
+        let chat: BTRChatViewModel?
+        if let pageChatAnchor {
+            chat = BTRChatViewModel.make(
+                book: book, publication: publication, anchorLocator: pageChatAnchor, kind: .page,
+                chapterTitle: currentChapterTitle, modelContext: modelContext)
+        } else if let locator = currentWordLocator {
+            chat = BTRChatViewModel.make(
+                book: book, publication: publication, anchorLocator: locator, chapterTitle: currentChapterTitle,
+                modelContext: modelContext)
+        } else {
+            chat = nil
+        }
         activeBTRChat = chat
         return chat
+    }
+
+    /// The reader controls' BTR Chat button: a chat about everything up to
+    /// the current word, with no selection. RSVP has no page, so the word
+    /// on screen is where the readable text ends.
+    func openPageChat() {
+        guard isBTRAvailable, let locator = currentWordLocator else { return }
+        pause()
+        pageChatAnchor = VisiblePageLocator.pageLocator(from: locator, endProgression: nil)
+        isShowingToolbar = false
+        isShowingBTRChat = true
     }
 
     /// Whether the reader's AI settings allow the BTR chat for this book —

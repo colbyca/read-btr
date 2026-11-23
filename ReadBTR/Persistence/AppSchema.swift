@@ -15,5 +15,6 @@ enum AppSchema {
         SavedQuote.self,
         BookCollection.self,
         CollectionEntry.self,
+        SavedBTRChat.self,
     ]
 }

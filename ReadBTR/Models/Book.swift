@@ -42,6 +42,10 @@ final class Book {
     @Relationship(deleteRule: .cascade, inverse: \SavedQuote.book)
     var savedQuotes: [SavedQuote] = []
 
+    /// Every BTR chat started in this book, kept so it can be reopened.
+    @Relationship(deleteRule: .cascade, inverse: \SavedBTRChat.book)
+    var btrChats: [SavedBTRChat] = []
+
     /// This book's places in collections (design-roadmap.md §2.12).
     /// Deleting the book removes it from every collection.
     @Relationship(deleteRule: .cascade, inverse: \CollectionEntry.book)

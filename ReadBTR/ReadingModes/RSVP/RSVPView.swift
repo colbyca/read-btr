@@ -51,7 +51,8 @@ private struct RSVPReadingScreen: View {
                         isVisible: viewModel.isShowingToolbar,
                         identifierPrefix: "rsvp",
                         onChapterSelect: { viewModel.isShowingChapterSelect = true },
-                        onSettings: { viewModel.isShowingSettings = true }
+                        onSettings: { viewModel.isShowingSettings = true },
+                        onBTRChat: viewModel.isBTRAvailable ? { viewModel.openPageChat() } : nil
                     )
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)

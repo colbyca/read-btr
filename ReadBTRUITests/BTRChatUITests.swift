@@ -52,6 +52,56 @@ final class BTRChatUITests: XCTestCase {
         XCTAssertTrue(word.waitForExistence(timeout: 5))
     }
 
+    /// The reader controls' BTR Chat button opens a page chat with no
+    /// passage; once a question is asked, the chat is listed in Saved Chats.
+    func testOpensPageChatFromReaderControlsAndSavesIt() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("-uitest-stub-ai")
+        app.launch()
+
+        let devMenu = app.buttons["dev-menu"]
+        XCTAssertTrue(devMenu.waitForExistence(timeout: 5))
+        devMenu.reliableTap()
+        app.buttons["Reset Library"].tap()
+        devMenu.reliableTap()
+        app.buttons["Seed alice.epub"].tap()
+
+        let bookButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'book-'")).firstMatch
+        XCTAssertTrue(bookButton.waitForExistence(timeout: 5))
+        bookButton.tap()
+        let rsvpOption = app.buttons["RSVP"]
+        XCTAssertTrue(rsvpOption.waitForExistence(timeout: 5))
+        rsvpOption.tap()
+
+        XCTAssertTrue(app.staticTexts["rsvp-current-word"].waitForExistence(timeout: 5))
+        app.otherElements["rsvp-background"].tap()
+
+        let chatButton = app.buttons["rsvp-btr-chat"]
+        XCTAssertTrue(chatButton.waitForExistence(timeout: 5))
+        chatButton.tap()
+
+        XCTAssertTrue(app.navigationBars["BTR Chat"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["btr-chat-page-scope"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["btr-chat-word-0"].exists)
+
+        let input = app.textFields["btr-chat-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("What is happening here?")
+        app.buttons["btr-chat-send"].tap()
+        let reply = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'curious heroine'")).firstMatch
+        XCTAssertTrue(reply.waitForExistence(timeout: 15))
+
+        app.buttons["btr-chat-history"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS 'What is happening here?'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        attach(app, name: "btr-chat-history")
+        app.buttons["btr-chat-history-done"].tap()
+
+        app.buttons["btr-chat-back"].tap()
+        XCTAssertTrue(app.staticTexts["rsvp-current-word"].waitForExistence(timeout: 5))
+    }
+
     private func attach(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
