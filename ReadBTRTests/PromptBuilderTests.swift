@@ -37,6 +37,14 @@ struct PromptBuilderTests {
         #expect(!turn.contains("selected these words"))
     }
 
+    @Test func chatTurnFromThePageSaysSoAndHasNoPassage() {
+        let turn = PromptBuilder.chatTurn(question: "Q", focus: nil, excerpts: "x", openedFromPage: true)
+        #expect(turn.contains("opened this chat from the page they are on"))
+        #expect(!turn.contains("from this passage"))
+        let plain = PromptBuilder.chatTurn(question: "Q", focus: nil, excerpts: "x")
+        #expect(!plain.contains("opened this chat from the page"))
+    }
+
     @Test func retrievalPlanPromptIncludesQuestionTitlesAndConversation() {
         let prompt = PromptBuilder.retrievalPlanPrompt(
             question: "Why is the Hatter angry?",

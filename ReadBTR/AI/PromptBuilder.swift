@@ -80,7 +80,13 @@ enum PromptBuilder {
     /// Wraps the reader's newest question with the book text it should be
     /// answered from. Only the newest turn carries excerpts; earlier turns
     /// in the conversation are sent as plain question/answer text.
-    static func chatTurn(question: String, focus: ChatFocus?, excerpts: String) -> String {
+    ///
+    /// `openedFromPage` marks a chat opened from the reader controls with
+    /// nothing selected: the current book's excerpts then end at the
+    /// bottom of the page the reader is on.
+    static func chatTurn(question: String, focus: ChatFocus?, excerpts: String, openedFromPage: Bool = false)
+        -> String
+    {
         var sections: [String] = []
         sections.append(
             """
@@ -98,6 +104,14 @@ enum PromptBuilder {
                     + "probably about them."
             }
             sections.append(focusLines)
+        }
+        if openedFromPage {
+            sections.append(
+                """
+                The reader opened this chat from the page they are on, without selecting \
+                anything. The current book's excerpts end at the bottom of that page, so \
+                "this page" or "here" means the last part of them.
+                """)
         }
         sections.append("Reader's question: \(question)")
         return sections.joined(separator: "\n\n")

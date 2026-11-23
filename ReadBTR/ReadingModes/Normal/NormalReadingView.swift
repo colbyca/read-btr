@@ -64,7 +64,8 @@ private struct NormalReadingScreen: View {
                             isVisible: viewModel.isShowingToolbar,
                             identifierPrefix: "normal-reading",
                             onChapterSelect: { viewModel.isShowingChapterSelect = true },
-                            onSettings: { viewModel.isShowingSettings = true }
+                            onSettings: { viewModel.isShowingSettings = true },
+                            onBTRChat: viewModel.isBTRAvailable ? { Task { await viewModel.openPageChat() } } : nil
                         )
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar(viewModel.isShowingToolbar ? .visible : .hidden, for: .navigationBar)

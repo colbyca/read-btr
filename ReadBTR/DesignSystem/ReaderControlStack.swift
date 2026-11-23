@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// The chapter-select button with the settings button below it, floating
+/// The chapter-select button with the settings button below it — and,
+/// when the BTR chat is available, a button below those that opens the
+/// chat about the page on screen — floating
 /// just under the top-trailing corner of the navigation bar. It lives
 /// outside the toolbar because a bar can't fit two full-size buttons stacked
 /// vertically, and leaving the trailing slot empty keeps the chapter header
@@ -10,6 +12,7 @@ private struct ReaderControlStack: ViewModifier {
     let identifierPrefix: String
     let onChapterSelect: () -> Void
     let onSettings: () -> Void
+    let onBTRChat: (() -> Void)?
 
     func body(content: Content) -> some View {
         ZStack(alignment: .topTrailing) {
@@ -18,6 +21,11 @@ private struct ReaderControlStack: ViewModifier {
                 VStack(spacing: 0) {
                     button(systemImage: "list.bullet", label: "Chapters", suffix: "chapter-select", action: onChapterSelect)
                     button(systemImage: "gearshape", label: "Settings", suffix: "settings", action: onSettings)
+                    if let onBTRChat {
+                        button(
+                            systemImage: "bubble.left.and.text.bubble.right", label: "BTR Chat", suffix: "btr-chat",
+                            action: onBTRChat)
+                    }
                 }
                 .background(.regularMaterial, in: Capsule())
                 .padding(.top, 8)
@@ -50,13 +58,15 @@ extension View {
         isVisible: Bool,
         identifierPrefix: String,
         onChapterSelect: @escaping () -> Void,
-        onSettings: @escaping () -> Void
+        onSettings: @escaping () -> Void,
+        onBTRChat: (() -> Void)? = nil
     ) -> some View {
         modifier(ReaderControlStack(
             isVisible: isVisible,
             identifierPrefix: identifierPrefix,
             onChapterSelect: onChapterSelect,
-            onSettings: onSettings
+            onSettings: onSettings,
+            onBTRChat: onBTRChat
         ))
     }
 }

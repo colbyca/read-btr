@@ -57,9 +57,17 @@ final class NormalReadingViewModel {
     private(set) var btrSelection: Selection?
     var isShowingBTRChat = false {
         didSet {
-            if !isShowingBTRChat { activeBTRChat = nil }
+            if !isShowingBTRChat {
+                activeBTRChat = nil
+                pageChatAnchor = nil
+            }
         }
     }
+
+    /// Set by `openPageChat()`: the end of the page on screen, for a chat
+    /// opened from the reader controls with nothing selected. Takes
+    /// precedence over any selection while the chat is up.
+    @ObservationIgnored private var pageChatAnchor: Locator?
 
     /// The open chat, kept for as long as it's shown: the full-screen
     /// cover's content closure can be re-evaluated while it's up, and must
@@ -179,11 +187,33 @@ final class NormalReadingViewModel {
     /// this stays defensive rather than assuming that ordering).
     func makeBTRChatViewModel() -> BTRChatViewModel? {
         if let activeBTRChat { return activeBTRChat }
-        guard let publication, let locator = btrSelection?.locator else { return nil }
-        let chat = BTRChatViewModel.make(
-            book: book, publication: publication, anchorLocator: locator, modelContext: modelContext)
+        guard let publication else { return nil }
+        let chat: BTRChatViewModel?
+        if let pageChatAnchor {
+            chat = BTRChatViewModel.make(
+                book: book, publication: publication, anchorLocator: pageChatAnchor, kind: .page,
+                chapterTitle: currentChapterTitle, modelContext: modelContext)
+        } else if let locator = btrSelection?.locator {
+            chat = BTRChatViewModel.make(
+                book: book, publication: publication, anchorLocator: locator, chapterTitle: currentChapterTitle,
+                modelContext: modelContext)
+        } else {
+            chat = nil
+        }
         activeBTRChat = chat
         return chat
+    }
+
+    /// The reader controls' BTR Chat button: a chat about the page on
+    /// screen and everything before it, with no selection.
+    func openPageChat() async {
+        guard isBTRAvailable, let navigatorHost,
+            let anchor = await VisiblePageLocator.endOfVisiblePage(in: navigatorHost.navigator)
+                ?? currentLocator
+        else { return }
+        pageChatAnchor = anchor
+        isShowingToolbar = false
+        isShowingBTRChat = true
     }
 
     /// Whether the reader's AI settings allow the BTR chat for this book —
